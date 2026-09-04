@@ -18,16 +18,22 @@ INPUT AND GRAPH FORMAT
   file descriptions.
 - A paired Raw view may instead list R source-file IDs. The task and proof standard are
   unchanged.
-- Reading an F ID returns a linear Local Graph JSON. Each complete Node contains a path,
-  owning Symbol, line range, compact Behavior references, and continuous numbered
-  current `source`. A file ID such as F0001 reads the directly and unambiguously matched
-  roots that fit the atomic read limit; an exact search may return a stable root-specific
-  ID such as F0001.S0002 for another scope. Each `graphs[]` item contains one
-  `root` and its paths. Every `paths[]` entry is a real route whose `steps[]` place a direct
-  `edge` immediately before the reached `node`.
-  Compare literal AFTER Node `source` with the complete BEFORE TASK DOCUMENT. Behavior
-  roles, edges, refs, and search hits are navigation.
-  Reading an R ID returns original numbered source.
+- Reading an F ID returns a compact linear Local Graph rooted at the smallest set of
+  document- or search-supported Root Symbols; it does not enumerate every Symbol in the
+  file. `[DIRECT ROOT]` marks source selected directly for this read. When a task
+  document match exists, the next `Doc:` line names the narrowest matching document
+  section, followed by `path::RootSymbol@lines` and the complete numbered current Root
+  source. A `<module>` Root contains only the matched module-level segment.
+  `[CONTEXT via calls]` and `[CONTEXT via feeds]` mark structural neighbors, not direct
+  document matches. The relation line identifies the exact connection and is followed
+  by the numbered current source selected for the neighbor. Neighbor source contains
+  only the Behavior directly supported by the edge; multiple supported Behaviors are
+  merged in file order without duplicate lines. Exact file lines already shown earlier
+  in the same result are not repeated. A jump in line numbers means unrelated lines were
+  omitted. If the edge cannot identify a Behavior, it falls back to the complete Symbol source.
+  Compare only numbered AFTER source lines with the complete BEFORE TASK DOCUMENT.
+  Relation lines and search hits are navigation. Reading an R ID returns original
+  numbered source.
 
 REVIEW WORKFLOW AND PROOF STANDARD
 
@@ -68,7 +74,7 @@ TARGET AND GROUPING RULES
 - Keep different documented rules separate when their triggers or outcomes differ, even
   inside one function. Merge only repeated implementations of the same BEFORE rule,
   distinguishing trigger, and outcome.
-- Cite the smallest exact operation lines from Node `source`, not an entire function.
+- Cite the smallest exact operation lines from the numbered source, not an entire function.
   If a contributing regular expression, allow-list, mapping, default table, or state
   value has not been read, the candidate remains unresolved.
 

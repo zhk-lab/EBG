@@ -172,16 +172,18 @@ class PromptAssetTests(unittest.TestCase):
         self.assertIn("otherwise largely complete task document", normalized)
         self.assertIn("ranked file table", normalized)
         self.assertIn("Direct document matches rank first", normalized)
-        self.assertIn("linear Local Graph JSON", prompt)
-        self.assertIn("continuous numbered `source`", normalized)
+        self.assertIn("compact linear Local Graph", prompt)
+        self.assertIn("complete numbered Root source", normalized)
+        self.assertIn("[DIRECT ROOT]", prompt)
+        self.assertIn("[CONTEXT via calls]", prompt)
+        self.assertIn("falls back to the complete Symbol source", normalized)
+        self.assertNotIn("Local Graph JSON", prompt)
         self.assertNotIn("Compression preserves", prompt)
         self.assertIn("directory entries are options, not a checklist", normalized.lower())
         self.assertIn("complete TASK DOCUMENT", normalized)
         self.assertIn("defaults, null/empty handling, exceptions, ordering", normalized)
         self.assertIn("empty `findings` array is correct", normalized)
         self.assertIn("current production source", normalized)
-        for graph_field in ("`graphs[]`", "`root`", "`paths[]`", "`steps[]`"):
-            self.assertIn(graph_field, prompt)
         for heading in (
             "INPUT AND GRAPH FORMAT",
             "REVIEW WORKFLOW AND PROOF STANDARD",
@@ -200,9 +202,12 @@ class PromptAssetTests(unittest.TestCase):
         self.assertIn("original_document", normalized)
         self.assertIn("BEFORE -> AFTER difference", normalized)
         self.assertIn("ranked file table", normalized)
-        self.assertIn("linear Local Graph JSON", prompt)
-        self.assertIn("continuous numbered current `source`", normalized)
-        self.assertIn("Compare literal AFTER Node `source`", normalized)
+        self.assertIn("compact linear Local Graph", prompt)
+        self.assertIn("complete numbered current Root source", normalized)
+        self.assertIn("[DIRECT ROOT]", prompt)
+        self.assertIn("[CONTEXT via feeds]", prompt)
+        self.assertIn("Compare only numbered AFTER source lines", normalized)
+        self.assertNotIn("Local Graph JSON", prompt)
         self.assertNotIn("Compression preserves", prompt)
         self.assertIn("complete BEFORE TASK DOCUMENT", normalized)
         self.assertIn("Maintain five distinct candidate slots", normalized)
@@ -210,8 +215,6 @@ class PromptAssetTests(unittest.TestCase):
         self.assertIn("all responsible non-contiguous ranges", normalized)
         self.assertIn("correct BEFORE -> AFTER direction", normalized)
         self.assertIn("A top-level assignment is a `field`", normalized)
-        for graph_field in ("`graphs[]`", "`root`", "`paths[]`", "`steps[]`"):
-            self.assertIn(graph_field, prompt)
         for heading in (
             "INPUT AND GRAPH FORMAT",
             "REVIEW WORKFLOW AND PROOF STANDARD",
@@ -382,7 +385,9 @@ class PromptAssetTests(unittest.TestCase):
                 self.assertIn("Each R Read ID", raw.initial_user_prompt)
                 self.assertNotIn("Local Graph JSON", raw.initial_user_prompt)
                 self.assertIn("INPUT AND GRAPH FORMAT", graph.initial_user_prompt)
-                self.assertIn("linear Local Graph JSON", graph.initial_user_prompt)
+                self.assertIn("compact linear Local Graph", graph.initial_user_prompt)
+                self.assertIn("[DIRECT ROOT]", graph.initial_user_prompt)
+                self.assertNotIn("Local Graph JSON", graph.initial_user_prompt)
 
     def test_beg_repo_request_explains_all_runtime_blocks(self) -> None:
         prompt = build_repo_initial_user_prompt(

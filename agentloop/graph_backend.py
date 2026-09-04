@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable
@@ -35,6 +36,10 @@ class GraphBackend:
         directory: dict[str, Any],
         *,
         count_tokens: TokenCounter | None = None,
+        behavior_level_neighbors: bool = True,
+        compact_rendering: bool = True,
+        minimal_roots: bool = True,
+        expand_neighbors: bool = True,
     ) -> None:
         try:
             retriever = LocalGraphRetriever(
@@ -42,12 +47,17 @@ class GraphBackend:
                 graph,
                 directory,
                 count_tokens=count_tokens,
+                behavior_level_neighbors=behavior_level_neighbors,
+                compact_edges=compact_rendering,
+                minimal_roots=minimal_roots,
+                expand_neighbors=expand_neighbors,
             )
         except RetrievalError as error:
             raise BackendError(str(error)) from error
 
         self.input_id = bundle.input_id
         self.benchmark = bundle.benchmark
+        self.compact_rendering = compact_rendering
         self.initial_index = render_ranked_directory(directory)
         self.initial_index_tokens = int(directory["token_count"])
         self._retriever = retriever
@@ -83,6 +93,10 @@ class GraphBackend:
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
+                f"behavior_level_neighbors={behavior_level_neighbors}",
+                f"compact_rendering={compact_rendering}",
+                f"minimal_roots={minimal_roots}",
+                f"expand_neighbors={expand_neighbors}",
             ]
         )
 
@@ -232,12 +246,17 @@ class GraphBackend:
                 start=1,
                 end=1,
             )
+        rendered_source = (
+            _render_compact_local_graph(local_graph)
+            if self.compact_rendering
+            else json.dumps(local_graph, ensure_ascii=False, indent=2)
+        )
         return EvidenceUnit(
             unit_id=read_id,
             unit_kind="local_graph",
             name=f"{path} Local Graph",
             span=span,
-            source=json.dumps(local_graph, ensure_ascii=False, indent=2),
+            source=rendered_source,
             source_regions=regions,
             groundable=bool(regions),
             behavior_total=sum(
@@ -264,25 +283,129 @@ def _source_regions(local_graph: dict[str, Any]) -> tuple[SourceRegion, ...]:
             if "ref" not in step["node"]
         )
         for node in nodes:
-            key = (
-                str(node["path"]),
-                str(node["symbol"]),
-                int(node["lines"][0]),
-                int(node["lines"][1]),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            regions.append(
-                SourceRegion(
-                    symbols=(key[1],),
-                    start=key[2],
-                    end=key[3],
-                    source=str(node["source"]),
-                    path=key[0],
+            path = str(node["path"])
+            symbol = str(node["symbol"])
+            for start, end, source in _numbered_source_regions(str(node["source"])):
+                key = (path, symbol, start, end)
+                if key in seen:
+                    continue
+                seen.add(key)
+                regions.append(
+                    SourceRegion(
+                        symbols=(symbol,),
+                        start=start,
+                        end=end,
+                        source=source,
+                        path=path,
+                    )
                 )
-            )
     return tuple(regions)
+
+
+def _numbered_source_regions(source: str) -> tuple[tuple[int, int, str], ...]:
+    regions: list[tuple[int, int, str]] = []
+    current: list[tuple[int, str]] = []
+    for line in source.splitlines():
+        match = re.match(r"^(\d+) \|", line)
+        if match is None:
+            if current:
+                regions.append(
+                    (current[0][0], current[-1][0], "\n".join(item[1] for item in current))
+                )
+                current = []
+            continue
+        line_number = int(match.group(1))
+        if current and line_number != current[-1][0] + 1:
+            regions.append(
+                (current[0][0], current[-1][0], "\n".join(item[1] for item in current))
+            )
+            current = []
+        current.append((line_number, line))
+    if current:
+        regions.append(
+            (current[0][0], current[-1][0], "\n".join(item[1] for item in current))
+        )
+    return tuple(regions)
+
+
+def _render_compact_local_graph(local_graph: dict[str, Any]) -> str:
+    lines: list[str] = []
+    shown_source_lines: set[tuple[str, int]] = set()
+    for graph in local_graph["graphs"]:
+        root = graph["root"]
+        if lines:
+            lines.append("")
+        lines.append("[DIRECT ROOT]")
+        if "ref" in root:
+            lines.append(f"Root already shown: {root['ref']}")
+        else:
+            document_section = root.get("document_section")
+            if document_section:
+                lines.append(f"Doc: {document_section}")
+            ranges = _source_range_label(str(root["source"]))
+            lines.append(f"{root['path']}::{root['symbol']}@{ranges}")
+            source = _deduplicated_source(
+                str(root["source"]), str(root["path"]), shown_source_lines
+            )
+            if source:
+                lines.append(source)
+        for graph_path in graph["paths"]:
+            for step in graph_path["steps"]:
+                relation = _compact_relation_name(str(step["edge"]))
+                lines.extend(
+                    ["", f"[CONTEXT via {relation}]", str(step["edge"])]
+                )
+                node = step["node"]
+                if "ref" not in node:
+                    source = _deduplicated_source(
+                        str(node["source"]),
+                        str(node["path"]),
+                        shown_source_lines,
+                    )
+                    if source:
+                        lines.append(source)
+    return "\n".join(lines).rstrip()
+
+
+def _compact_relation_name(edge: str) -> str:
+    if re.search(r"\sfeeds(?:\([^)]*\))?\s", edge):
+        return "feeds"
+    if re.search(r"\scalls\s", edge):
+        return "calls"
+    return "relation"
+
+
+def _source_range_label(source: str) -> str:
+    return ",".join(
+        str(start) if start == end else f"{start}-{end}"
+        for start, end, _ in _numbered_source_regions(source)
+    ) or "?"
+
+
+def _deduplicated_source(
+    source: str,
+    path: str,
+    shown: set[tuple[str, int]],
+) -> str:
+    retained: list[tuple[int, str]] = []
+    for line in source.splitlines():
+        match = re.match(r"^(\d+) \|", line)
+        if match is None:
+            continue
+        line_number = int(match.group(1))
+        key = (path, line_number)
+        if key in shown:
+            continue
+        shown.add(key)
+        retained.append((line_number, line))
+    rendered: list[str] = []
+    previous: int | None = None
+    for line_number, line in retained:
+        if previous is not None and previous + 1 < line_number:
+            rendered.append("...")
+        rendered.append(line)
+        previous = line_number
+    return "\n".join(rendered)
 
 
 def _priority_groups(

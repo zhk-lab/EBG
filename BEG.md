@@ -20,11 +20,11 @@ Trace：完整原始轨迹
 
 BEG 的目标是 benchmark 指标高于 Raw baseline，同时消耗更少的总 token。它针对 baseline 的三类主要负担进行设计。
 
-**提高语义指标。** Raw baseline 只提供普通文件目录或原始长轨迹，模型需要自己寻找相关文件、任务边界和执行结果。BEG 先把 Evidence 组合成完整 Behavior：Repo 使用 `path + symbol` 组织代码行为并保留 `calls/feeds`，Trace 使用 `task_id` 组织需求履行链并保留直接的 `informs/supersedes`。模块六再把同一张图整理为模型可连续阅读的 JSON，减少模型自行拼接跨函数或跨轮事实的负担。
+**提高语义指标。** Raw baseline 只提供普通文件目录或原始长轨迹，模型需要自己寻找相关文件、任务边界和执行结果。BEG 先把 Evidence 组合成完整 Behavior：Repo 使用 `path + symbol` 组织代码行为并保留 `calls/feeds`，Trace 使用 `task_id` 组织需求履行链并保留直接的 `informs/supersedes`。模块六再把同一张图整理为模型可连续阅读的对齐式 compact 文本，明确区分直接 Root 与结构邻居，减少模型自行拼接或误判跨函数事实的负担；Trace 仍使用完整 Task Scope JSON。
 
 **提高定位指标。** Raw baseline 给模型的是一段段普通文本，模型即使理解了问题，也容易只指出整个文件、整个 Symbol，或只定位结果行，无法准确说明哪些原文共同支撑判断。BEG 从模块一开始就为每条 Evidence 保存真实文件、Symbol、行号或 turn；Behavior 将结果锚点与其触发条件绑定，关系边也保存连接发生的位置。局部图把这些位置和原文放在对应节点旁边，使最终答案能够落到真正支撑条件和结果的精确 Evidence，而不是宽泛的相关区域。
 
-**减少 token。** Raw baseline 的无序目录和长文件容易带来更多 search/read 轮次，并在多轮上下文中重复发送完整文件。BEG 用排序目录优先暴露高相关入口；局部图按优先级读取明确命中的 root 和少量直接相关的一跳邻居，并对节点、原文和边去重。超出单次预算的明确 Symbol 通过 search 获得稳定的 root 级 Read ID 后按需读取。这样设计的目标是减少错误检索、重复源码和无效轮次，并让模型在证据充分后尽早 `finish`。
+**减少 token。** Raw baseline 的无序目录和长文件容易带来更多 search/read 轮次，并在多轮上下文中重复发送完整文件。BEG 用排序目录优先暴露高相关入口；局部图先固定与读取意图对应的最小 Root 集合，再展开少量直接相关的一跳邻居。Root 保留完整源码；邻居能精确对应 Behavior 时只返回相关源码，无法可靠判断时回退到完整 Symbol。源码行全局去重，节省出的预算不再用于补入无关 Root。超出单次预算的明确 Symbol 通过 search 获得稳定的 root 级 Read ID 后按需读取。
 
 以上是 BEG 必须在实现中真正保证的机制，而不是预设的实验结论。最终仍需在相同 AgentLoop、模型配置、样本和 Judge 下，与 Raw baseline 配对验证语义、定位和总 token。
 
@@ -207,7 +207,7 @@ Repo 的运行关系只保留两类作用域边：
 - `calls`：源代码作用域中存在可唯一解析的直接调用，目标是被调用作用域；
 - `feeds`：源代码作用域的明确返回值、产出或状态写入被目标作用域使用。
 
-Repo 中，模块六的 Code Node 是由 path + symbol 标识的作用域容器，内部包含该作用域的全部 Behavior；calls/feeds 连接 Code Node，而不直接连接 Behavior。
+Repo 中，底层 `calls/feeds` 仍连接由 `path + symbol` 标识的 Code Node，而不直接连接 Behavior。模块六读取时再根据边的支撑 Evidence，把每个端点映射到 Evidence 所属的 Behavior：能够确定时只展示对应 Behavior，命中多个时全部保留，不能确定时回退到完整 Symbol。这样既保留稳定、可验证的 Symbol 级图结构，又避免每次沿边都返回对侧 Symbol 的全部 Behavior。
 
 ```json
 {
@@ -320,79 +320,51 @@ FeedbackTrace 不进入 Ranked Directory。
 
 ### 作用
 
-模块六把后台图整理成模型可以连续阅读的 JSON。Repo 通过 `read(F0001)` 取得少量相关作用域，并按 `root → edge → node` 阅读；Trace 不做检索，而是把全部 Behavior 按 `task_id` 聚合为 Task Scope。模型无需在 Evidence、Behavior 和 Edge 三张表之间来回查找。
+模块六把后台图整理成模型可以连续阅读的证据。Repo 通过 `read(F0001)` 取得对齐式 compact 局部图：直接命中的 Root、关系说明和邻居源码具有不同的明确标签；Trace 不做检索，而是把全部 Behavior 按 `task_id` 聚合为完整 Task Scope JSON。模型无需在 Evidence、Behavior 和 Edge 三张表之间来回查找。
 
-### 构建与读取规则
+### Repo：构建与读取规则
 
 ```text
 文件 F0001
-  ↓ 选择最相关的代码作用域
-Code root（path + symbol）
-  ├─ calls edge → 相邻 Code node
-  └─ feeds edge → 相邻 Code node
+  ↓ 固定与读取意图对应的最小 Root 集合
+[DIRECT ROOT] 完整 Symbol 源码
+  ├─ [CONTEXT via calls] → 对应 Behavior 或完整 Symbol
+  └─ [CONTEXT via feeds] → 对应 Behavior 或完整 Symbol
 
 其他作用域通过 search → read(F0001.S0002) 单独读取
 ```
 
-1. Agent 执行 `read(F0001)` 时，优先把任务文档明确提到的函数、方法、调用名或配置键选为 root。一个文件命中多个明确作用域时，按优先级依次生成多个局部图，总输入不超过 65,536 token；没有明确命中时，默认选择 Behavior 较多且位置靠前的一个作用域；
-2. 一个 Node 对应一个 `path + symbol` 代码作用域，里面展示该作用域的完整连续源码、全部 Behavior，以及每个 Behavior 的 trigger、operation、result Evidence 行号；
-3. 只选择与 root 直接相连、并且有 root Behavior Evidence 支撑的 `calls/feeds` 边。每个 root 最多展开四条边且只展开一跳，不继续读取邻居的邻居；
-4. 邻居按“文档直接命中、`feeds`、`calls`、稳定源码位置”的顺序选择。每条分支都按 `edge → node` 展示，相同 Node 再次出现时只使用 `ref`；
-5. 未展示的函数或方法不会被丢弃，Agent 可以先用 `search` 找到 `F0001.S0002` 形式的专用 Read ID，再单独读取该作用域。
+1. `read(F0001)` 先选择 Root。完整或限定 Symbol 的文档命中优先，其次是可唯一定位的代码 Evidence，父作用域只作兜底；没有直接命中时只选择一个代表 Symbol。Root 集合在边展开和文本渲染前固定，内容变短后不能用剩余预算补入其他 Root；
+2. `<module>` 只有在文档明确对应模块级常量、配置或注册语句时才作为 Root，并且只返回命中的模块级源码片段；
+3. Root 默认展示完整连续 Symbol 源码。只选择与 Root 直接相连、且有 Root Behavior Evidence 支撑的 `calls/feeds`；每个 Root 最多展开四条边且只展开一跳；
+4. 底层边仍是 `Symbol → Symbol`。读取时将边的端点 Evidence 与对侧 Behavior 引用的 Evidence 匹配：能确定具体 Behavior 时只返回这些 Behavior 的源码，命中多个时全部保留；Behavior 清单不完整或无法确定时返回完整 Symbol，不能为节省 token 强行任选一个分支；
+5. `calls` 通常只能精确定位调用者一端；被调用者没有返回侧 Evidence 时会回退到完整 Symbol。`feeds` 通常同时具有生产端和消费端 Evidence，更容易精确到两侧 Behavior；
+6. 邻居优先保留 Root 调用的目标、向 Root 提供数据的来源，以及有直接文档命中的相邻作用域。相同邻居只展示一次，源码按原文件顺序排列，相同行在一次 read 中全局去重；
+7. 未展示的函数或方法不会被删除。Agent 可以通过 `search` 获得 `F0001.S0002` 形式的专用 Read ID，再单独读取该作用域。
 
-### Repo Local Linear Graph Schema
+### Repo：Root-Aligned Compact Code Graph
 
-一次文件级 `read(F0001)` 可以返回预算内的多个局部图；精确 `read(F0001.S0002)` 只返回指定 root。外层统一使用 `graphs[]`：
+模型不读取内部缩进 JSON，也不看到 Behavior ID 或 Evidence ID。Root、文档锚点和结构邻居按以下格式输出：
 
-```json
-{
-  "read_id": "F0001",
-  "graphs": [
-    {
-      "root": {
-        "path": "src/api.py",
-        "symbol": "Client.run",
-        "lines": [18, 40],
-        "behaviors": [
-          {
-            "behavior_id": "B0107",
-            "result_type": "return",
-            "trigger": ["E0012@20"],
-            "operation": ["E0013@24"],
-            "result": ["E0014@31"]
-          }
-        ],
-        "source": "18 | 带行号的连续原始源码\n...\n40 | ..."
-      },
-      "paths": [
-        {
-          "path_id": "P1",
-          "steps": [
-            {
-              "edge": "src/api.py::Client.run --calls[E0013@24]--> src/output.py::emit",
-              "node": {
-                "path": "src/output.py",
-                "symbol": "emit",
-                "lines": [8, 19],
-                "behaviors": [
-                  {
-                    "behavior_id": "B0201",
-                    "result_type": "output",
-                    "trigger": [],
-                    "operation": ["E0020@11"],
-                    "result": ["E0021@16"]
-                  }
-                ],
-                "source": "8 | 带行号的连续原始源码\n...\n19 | ..."
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
+```text
+[DIRECT ROOT]
+Doc: Public API / Client.run
+src/api.py::Client.run@18-40
+18 | def run(...):
+...
+40 |     return result
+
+[CONTEXT via calls]
+Client.run@24 calls src/output.py::emit@8-19
+8 | def emit(...):
+...
+19 |     return None
 ```
+
+`[DIRECT ROOT]` 表示该源码由本次读取意图直接选中。只有文档明确出现完整 Symbol 时才显示 `Doc:`；顶层函数可以使用明确的函数名。Evidence 词、父作用域和 `__init__` 等通用方法名可以参与 Root 排序，但不能生成 `Doc:`，防止把不相关章节伪装成直接文档依据。
+
+`[CONTEXT via calls]` 和 `[CONTEXT via feeds]` 只表示沿真实边补充的结构上下文。紧随其后的关系行明确谁在第几行通过什么关系连接谁；只有带行号的源码才是实现证据。源码行号不连续表示中间无关 Behavior 已被省略；无法可靠裁剪时则返回完整 Symbol。
+
 
 ### Trace
 
@@ -513,7 +485,7 @@ F0003 | src/patchy/cache.py | PatchingCache.store | exact symbol; source: maxsiz
 |---|---|---|
 | 初始输入 | 完整任务文档 + 普通生产文件目录 | 同一完整任务文档 + 图排序文件目录 |
 | `search` | 搜索 path、Symbol 和原始源码，返回 `R` 文件 ID | 搜索 path、Symbol、Behavior 和 Evidence，返回 `F` 文件 ID 及命中根 |
-| `read` | 返回对应原始生产文件 | 返回以该文件为 root 的 Local Graph |
+| `read` | 返回对应原始生产文件 | 返回以该文件为入口的对齐式 compact Local Graph |
 | `finish` | benchmark 原生 schema | 相同 benchmark 原生 schema |
 
 两端必须使用同一模型、reasoning 配置、最大轮数、输出上限、样本、任务定义和 Judge。Prompt 只解释各自会看到的证据格式，不能暗示哪一端更可靠。

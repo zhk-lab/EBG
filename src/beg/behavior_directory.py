@@ -32,6 +32,9 @@ _PYTHON_KEYWORDS = {
     "None", "nonlocal", "not", "or", "pass", "raise", "return", "True",
     "try", "while", "with", "yield",
 }
+_PYTHON_KEYWORDS_FOLDED = frozenset(
+    item.casefold() for item in _PYTHON_KEYWORDS
+)
 _ARTIFACT_ORDER = {
     "source": 0,
     "executable": 1,
@@ -46,6 +49,7 @@ class _Section:
     start: int
     end: int
     order: int
+    level: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +61,16 @@ class _RepoFile:
     symbols: tuple[str, ...]
     sections: tuple[str, ...]
     section_orders: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _RootCandidate:
+    symbol: str
+    priority: int
+    section_orders: frozenset[int]
+    evidence_ids: frozenset[str]
+    source_tokens: int
+    legacy_order: int
 
 
 def build_ranked_directory(
@@ -334,13 +348,333 @@ def _select_repo_root_symbols(
     return result
 
 
+def select_minimal_repo_roots(
+    bundle: VisibleBundle,
+    graph: dict[str, Any],
+    *,
+    count_tokens: TokenCounter | None = None,
+) -> tuple[
+    dict[str, tuple[str, ...]],
+    dict[tuple[str, str], tuple[str, ...]],
+    dict[tuple[str, str], str],
+]:
+    """Choose a small, document-anchored root set independently of read budgets."""
+
+    if bundle.task_document is None:
+        raise DirectoryError("Repo root selection requires the complete task document")
+    document = bundle.task_document.content
+    counter = count_tokens or _default_token_count
+    sections = _document_sections(document)
+    legacy = _select_repo_root_symbols(graph, document)
+    behaviors_by_endpoint: dict[
+        tuple[str, str], list[dict[str, Any]]
+    ] = defaultdict(list)
+    for behavior in graph["behaviors"]:
+        behaviors_by_endpoint[
+            (str(behavior["path"]), str(behavior["symbol"]))
+        ].append(behavior)
+    evidence_by_id = {
+        str(item["evidence_id"]): item for item in graph["evidence"]
+    }
+    contexts_by_endpoint: dict[
+        tuple[str, str], list[dict[str, Any]]
+    ] = defaultdict(list)
+    for context in graph["source_contexts"]:
+        contexts_by_endpoint[
+            (str(context["path"]), str(context["symbol"]))
+        ].append(context)
+
+    code_term_sections = _document_code_term_sections(document, sections)
+    evidence_term_endpoints: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    call_name_endpoints: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    endpoint_term_evidence: dict[
+        tuple[str, str], dict[str, set[str]]
+    ] = defaultdict(lambda: defaultdict(set))
+    endpoint_call_evidence: dict[
+        tuple[str, str], dict[str, set[str]]
+    ] = defaultdict(lambda: defaultdict(set))
+    for evidence_id, evidence in evidence_by_id.items():
+        locator = evidence["locator"]
+        endpoint = (str(locator["path"]), str(locator["symbol"]))
+        if endpoint not in behaviors_by_endpoint:
+            continue
+        content = str(evidence["content"])
+        for match in _CALL_NAME.finditer(content):
+            name = match.group(1)
+            if name.casefold() in _PYTHON_KEYWORDS_FOLDED:
+                continue
+            call_name_endpoints[name.casefold()].add(endpoint)
+            endpoint_call_evidence[endpoint][name.casefold()].add(evidence_id)
+        for match in _IDENTIFIER.finditer(content):
+            term = match.group(1).casefold()
+            if term in _PYTHON_KEYWORDS_FOLDED:
+                continue
+            for candidate in {term, term.rsplit(".", 1)[-1]}:
+                evidence_term_endpoints[candidate].add(endpoint)
+                endpoint_term_evidence[endpoint][candidate].add(evidence_id)
+
+    selected_by_path: dict[str, tuple[str, ...]] = {}
+    module_evidence: dict[tuple[str, str], tuple[str, ...]] = {}
+    document_section_by_endpoint: dict[tuple[str, str], str] = {}
+    for path, legacy_symbols in legacy.items():
+        candidates: list[_RootCandidate] = []
+        for order, symbol in enumerate(legacy_symbols):
+            endpoint = (path, symbol)
+            strong_sections = _strong_symbol_section_matches(
+                document, sections, path, symbol
+            )
+            scope_sections = _scope_section_matches(
+                document, sections, path, symbol
+            )
+            evidence_sections: set[int] = set()
+            matched_evidence: set[str] = set()
+            for name, endpoints in call_name_endpoints.items():
+                if endpoints != {endpoint}:
+                    continue
+                escaped = re.escape(name)
+                call_sections = _matched_section_orders(
+                    document,
+                    sections,
+                    (
+                        re.compile(
+                            rf"(?<![\w.]){escaped}\s*\(",
+                            re.IGNORECASE,
+                        ),
+                        re.compile(
+                            rf"`(?:[\w.]+\.)?{escaped}"
+                            rf"(?:\s*\([^`\n]*\))?`",
+                            re.IGNORECASE,
+                        ),
+                    ),
+                )
+                if call_sections:
+                    evidence_sections.update(call_sections)
+                    matched_evidence.update(
+                        endpoint_call_evidence[endpoint][name]
+                    )
+            for term, section_orders in code_term_sections.items():
+                endpoints = evidence_term_endpoints.get(term, set())
+                if endpoints != {endpoint}:
+                    continue
+                evidence_sections.update(section_orders)
+                matched_evidence.update(endpoint_term_evidence[endpoint][term])
+            if symbol == "<module>" and not matched_evidence:
+                continue
+            # Keep only the strongest available anchor. Mixing a parent-scope
+            # mention into an exact Symbol match can attach an unrelated, deeper
+            # subsection to the Root.
+            matched_sections = (
+                strong_sections or evidence_sections or scope_sections
+            )
+            priority = (
+                0
+                if strong_sections
+                else 1
+                if evidence_sections
+                else 2
+                if scope_sections
+                else 3
+            )
+            source_cost = sum(
+                counter(str(context["source"]))
+                for context in contexts_by_endpoint.get(endpoint, [])
+            )
+            if symbol == "<module>" and matched_evidence:
+                source_cost = sum(
+                    counter(str(evidence_by_id[evidence_id]["content"]))
+                    for evidence_id in matched_evidence
+                )
+            candidates.append(
+                _RootCandidate(
+                    symbol=symbol,
+                    priority=priority,
+                    section_orders=frozenset(matched_sections),
+                    evidence_ids=frozenset(matched_evidence),
+                    source_tokens=max(1, source_cost),
+                    legacy_order=order,
+                )
+            )
+
+        directly_matched = [item for item in candidates if item.priority < 3]
+        if directly_matched:
+            # A section can name several independent Symbols.  Treating the
+            # whole section as one coverage item drops those explicit anchors.
+            # The legacy matcher has already collapsed an ambiguous parent
+            # scope to one representative; retain every remaining direct root.
+            chosen = sorted(
+                directly_matched,
+                key=lambda item: (
+                    item.priority,
+                    -len(item.section_orders),
+                    item.symbol == "<module>",
+                    item.source_tokens,
+                    item.legacy_order,
+                ),
+            )
+        else:
+            ordinary = [
+                item for item in candidates if item.symbol != "<module>"
+            ]
+            chosen = (ordinary or candidates)[:1]
+
+        selected_by_path[path] = tuple(item.symbol for item in chosen)
+        for item in chosen:
+            precise_sections = _exact_symbol_section_matches(
+                document, sections, path, item.symbol
+            )
+            section = _most_specific_section(
+                sections, precise_sections, symbol=item.symbol
+            )
+            # `Doc:` is a precision signal. Evidence terms, enclosing scopes,
+            # and an unqualified method leaf such as ``__init__`` may rank a
+            # useful Root but cannot claim a direct section-level match.
+            if section is not None:
+                document_section_by_endpoint[(path, item.symbol)] = section.title
+            if item.symbol == "<module>" and item.evidence_ids:
+                module_evidence[(path, item.symbol)] = tuple(
+                    sorted(item.evidence_ids)
+                )
+    return selected_by_path, module_evidence, document_section_by_endpoint
+
+
+def _exact_symbol_section_matches(
+    document: str,
+    sections: list[_Section],
+    path: str,
+    symbol: str,
+) -> set[int]:
+    """Find sections that name this Symbol, without ambiguous leaf aliases."""
+
+    if symbol == "<module>":
+        return set()
+    patterns = [_literal_pattern(symbol)]
+    pure = PurePosixPath(path)
+    module_parts = [*pure.parts[:-1], pure.stem]
+    if module_parts and module_parts[-1] == "__init__":
+        module_parts.pop()
+    if module_parts and all(part.isidentifier() for part in module_parts):
+        variants = [module_parts]
+        if module_parts[0] == "src" and len(module_parts) > 1:
+            variants.append(module_parts[1:])
+        patterns.extend(
+            _literal_pattern(f"{'.'.join(parts)}.{symbol}")
+            for parts in variants
+        )
+    if "." not in symbol:
+        patterns.append(_explicit_code_name_pattern(symbol))
+    return _matched_section_orders(document, sections, patterns)
+
+
+def _most_specific_section(
+    sections: list[_Section],
+    section_orders: Iterable[int],
+    *,
+    symbol: str,
+) -> _Section | None:
+    """Return the narrowest deepest section that actually matched a Root."""
+
+    orders = set(section_orders)
+    matched = [item for item in sections if item.order in orders]
+    if not matched:
+        return None
+    symbol_name = symbol.casefold()
+    short_name = symbol.rsplit(".", 1)[-1].casefold()
+    return min(
+        matched,
+        key=lambda item: (
+            0
+            if symbol_name in item.title.casefold()
+            or re.search(
+                rf"(?<!\w){re.escape(short_name)}(?!\w)",
+                item.title,
+                re.IGNORECASE,
+            )
+            else 1,
+            -item.level,
+            item.end - item.start,
+            item.order,
+        ),
+    )
+
+
+def _strong_symbol_section_matches(
+    document: str,
+    sections: list[_Section],
+    path: str,
+    symbol: str,
+) -> set[int]:
+    if symbol == "<module>":
+        return set()
+    patterns = [_literal_pattern(symbol)]
+    patterns.extend(
+        _literal_pattern(alias)
+        for alias in sorted(_qualified_symbol_aliases(path, symbol))
+    )
+    patterns.append(_explicit_code_name_pattern(symbol.rsplit(".", 1)[-1]))
+    return _matched_section_orders(document, sections, patterns)
+
+
+def _scope_section_matches(
+    document: str,
+    sections: list[_Section],
+    path: str,
+    symbol: str,
+) -> set[int]:
+    if symbol == "<module>":
+        return set()
+    patterns: list[re.Pattern[str]] = []
+    symbol_parts = symbol.split(".")
+    for end in range(1, len(symbol_parts)):
+        scope = ".".join(symbol_parts[:end])
+        patterns.append(_literal_pattern(scope))
+        patterns.extend(
+            _literal_pattern(alias)
+            for alias in sorted(_qualified_symbol_aliases(path, scope))
+        )
+    return _matched_section_orders(document, sections, patterns)
+
+
+def _document_code_term_sections(
+    document: str, sections: list[_Section]
+) -> dict[str, set[int]]:
+    result: dict[str, set[int]] = defaultdict(set)
+    for span in _BACKTICK_CODE.finditer(document):
+        section = next(
+            (item for item in sections if item.start <= span.start() < item.end),
+            sections[-1],
+        )
+        for match in _IDENTIFIER.finditer(span.group(1)):
+            term = match.group(1)
+            if term in _PYTHON_KEYWORDS:
+                continue
+            result[term.casefold()].add(section.order)
+            result[term.rsplit(".", 1)[-1].casefold()].add(section.order)
+    return result
+
+
+def _matched_section_orders(
+    document: str,
+    sections: list[_Section],
+    patterns: Iterable[re.Pattern[str]],
+) -> set[int]:
+    result: set[int] = set()
+    for pattern in patterns:
+        for match in pattern.finditer(document):
+            section = next(
+                (item for item in sections if item.start <= match.start() < item.end),
+                sections[-1],
+            )
+            result.add(section.order)
+    return result
+
+
 def _document_sections(document: str) -> list[_Section]:
     headings = list(_HEADING.finditer(document))
     if not headings:
-        return [_Section("Document", 0, len(document), 0)]
+        return [_Section("Document", 0, len(document), 0, 0)]
     sections: list[_Section] = []
     if headings[0].start() > 0:
-        sections.append(_Section("Document", 0, headings[0].start(), 0))
+        sections.append(_Section("Document", 0, headings[0].start(), 0, 0))
     for index, heading in enumerate(headings):
         end = headings[index + 1].start() if index + 1 < len(headings) else len(document)
         sections.append(
@@ -349,6 +683,7 @@ def _document_sections(document: str) -> list[_Section]:
                 heading.start(),
                 end,
                 len(sections),
+                len(heading.group("marks")),
             )
         )
     return sections

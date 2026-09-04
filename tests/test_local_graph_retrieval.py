@@ -14,7 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from agentloop.evidence import render_tool_result
-from agentloop.graph_backend import GraphBackend
+from agentloop.graph_backend import GraphBackend, _render_compact_local_graph
 from agentloop.errors import BackendError
 from beg.behavior_atomization import build_behaviors
 from beg.behavior_directory import build_ranked_directory
@@ -275,7 +275,7 @@ class LocalGraphRetrievalTests(unittest.TestCase):
             with self.assertRaisesRegex(RetrievalError, "only Repo"):
                 LocalGraphRetriever(trace, {}, {})
 
-    def test_graph_backend_renders_only_linear_graph_and_tracks_cross_file_spans(self) -> None:
+    def test_graph_backend_renders_aligned_compact_and_tracks_cross_file_spans(self) -> None:
         with ProjectTemporaryDirectory() as temporary:
             bundle, graph, directory = assemble(
                 make_repo_bundle(
@@ -297,8 +297,13 @@ class LocalGraphRetrievalTests(unittest.TestCase):
             rendered = render_tool_result(result)
 
         self.assertIn("[[LINEAR LOCAL GRAPH]]", rendered)
-        self.assertIn('"root": {', rendered)
-        self.assertIn('"paths": [', rendered)
+        self.assertIn("[DIRECT ROOT]", rendered)
+        self.assertIn("Doc: API", rendered)
+        self.assertIn("pkg/api.py::run@3-6", rendered)
+        self.assertIn("[CONTEXT via calls]", rendered)
+        self.assertIn("run@5 calls pkg/helper.py::helper@3-4", rendered)
+        self.assertNotIn('"behavior_id"', rendered)
+        self.assertNotIn('"graphs"', rendered)
         self.assertNotIn("[[FILE EVIDENCE]]", rendered)
         self.assertEqual(
             {span.path for span in result.displayed_spans},
@@ -336,7 +341,173 @@ class LocalGraphRetrievalTests(unittest.TestCase):
             )
 
         self.assertEqual(result.displayed_spans, ())
-        self.assertIn('"graphs": []', render_tool_result(result))
+        rendered = render_tool_result(result)
+        self.assertIn("[[LINEAR LOCAL GRAPH]]", rendered)
+        self.assertNotIn("[DIRECT ROOT]", rendered)
+
+    def test_default_graph_backend_falls_back_to_complete_callee_symbol(self) -> None:
+        files = {
+            "pkg/api.py": (
+                "from pkg.worker import convert\n\n"
+                "def run(flag):\n"
+                "    return convert(flag)\n"
+            ),
+            "pkg/worker.py": (
+                "def convert(value):\n"
+                "    if value:\n"
+                "        return value + 1\n"
+                "    raise ValueError('invalid')\n"
+            ),
+        }
+        with ProjectTemporaryDirectory() as temporary:
+            bundle, graph, directory = assemble(
+                make_repo_bundle(
+                    temporary,
+                    repository_files=files,
+                    document="# API\nCall `run()` from pkg/api.py.\n",
+                )
+            )
+            backend = GraphBackend(bundle, graph, directory, count_tokens=len)
+            read_id = next(
+                item["read_id"]
+                for item in directory["query_index"]
+                if item["path"] == "pkg/api.py"
+            )
+            result = backend.read(
+                [read_id],
+                token_budget=100_000,
+                max_atomic_unit_tokens=200_000,
+                count_tokens=len,
+            )
+            rendered = render_tool_result(result)
+
+        self.assertIn("run@4 calls pkg/worker.py::convert@1-4", rendered)
+        self.assertIn("return value + 1", rendered)
+        self.assertIn("raise ValueError('invalid')", rendered)
+
+    def test_behavior_neighbor_keeps_matched_branch_and_default_outcome(self) -> None:
+        files = {
+            "pkg/gate.py": (
+                "class Gate:\n"
+                "    def __init__(self):\n"
+                "        self.enabled = True\n\n"
+                "    def choose(self):\n"
+                "        if self.enabled:\n"
+                "            return 1\n"
+                "        return 0\n"
+            )
+        }
+        with ProjectTemporaryDirectory() as temporary:
+            bundle, graph, directory = assemble(
+                make_repo_bundle(
+                    temporary,
+                    repository_files=files,
+                    document="# Gate\nInitialize `Gate.__init__()`.\n",
+                )
+            )
+            backend = GraphBackend(bundle, graph, directory, count_tokens=len)
+            read_id = next(
+                item["read_id"]
+                for item in directory["query_index"]
+                if item["path"] == "pkg/gate.py"
+            )
+            local = backend.local_graph(
+                read_id, root_symbols=("Gate.__init__",)
+            )
+
+        choose = next(
+            step["node"]
+            for graph_item in local["graphs"]
+            for path in graph_item["paths"]
+            for step in path["steps"]
+            if "Gate.choose" in step["edge"] and "ref" not in step["node"]
+        )
+        self.assertIn("return 1", choose["source"])
+        self.assertIn("return 0", choose["source"])
+
+    def test_compact_rendering_deduplicates_same_file_lines(self) -> None:
+        rendered = _render_compact_local_graph(
+            {
+                "graphs": [
+                    {
+                        "root": {
+                            "path": "same.py",
+                            "symbol": "root",
+                            "source": "1 | first\n2 | shared",
+                        },
+                        "paths": [
+                            {
+                                "steps": [
+                                    {
+                                        "edge": "root@2 calls neighbor@2-3",
+                                        "node": {
+                                            "path": "same.py",
+                                            "symbol": "neighbor",
+                                            "source": "2 | shared\n3 | last",
+                                        },
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(rendered.count("2 | shared"), 1)
+        self.assertIn("3 | last", rendered)
+
+    def test_direct_symbol_root_precedes_evidence_only_root(self) -> None:
+        files = {
+            "pkg/worker.py": (
+                "def convert(value):\n"
+                "    adjusted = value + 1\n"
+                "    return adjusted\n\n"
+                "def notify(value):\n"
+                "    print(value)\n"
+            )
+        }
+        with ProjectTemporaryDirectory() as temporary:
+            bundle, graph, directory = assemble(
+                make_repo_bundle(
+                    temporary,
+                    repository_files=files,
+                    document="# Worker\nCall `notify()` after computing `adjusted`.\n",
+                )
+            )
+            backend = GraphBackend(bundle, graph, directory, count_tokens=len)
+
+        self.assertEqual(
+            backend._retriever.root_symbols_by_path["pkg/worker.py"],
+            ("notify", "convert"),
+        )
+
+    def test_module_root_contains_only_document_matched_segment(self) -> None:
+        files = {"pkg/settings.py": "FIRST = 1\nSECOND = 2\n"}
+        with ProjectTemporaryDirectory() as temporary:
+            bundle, graph, directory = assemble(
+                make_repo_bundle(
+                    temporary,
+                    repository_files=files,
+                    document="# Settings\n`FIRST` controls the public mode.\n",
+                )
+            )
+            backend = GraphBackend(bundle, graph, directory, count_tokens=len)
+            read_id = next(
+                item["read_id"]
+                for item in directory["query_index"]
+                if item["path"] == "pkg/settings.py"
+            )
+            result = backend.read(
+                [read_id],
+                token_budget=100_000,
+                max_atomic_unit_tokens=200_000,
+                count_tokens=len,
+            )
+            rendered = render_tool_result(result)
+
+        self.assertIn("1 | FIRST = 1", rendered)
+        self.assertNotIn("2 | SECOND = 2", rendered)
 
 
 if __name__ == "__main__":
