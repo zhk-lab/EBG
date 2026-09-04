@@ -1,0 +1,2 @@
+"""BEG test suite."""
+

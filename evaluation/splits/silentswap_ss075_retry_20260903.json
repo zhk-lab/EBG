@@ -1,0 +1,22 @@
+{
+  "split_id": "silentswap_ss075_retry_20260903",
+  "selection": {
+    "development_count": 1,
+    "formal_count": 1,
+    "method": "single-sample retry of ss_075 after a finish-format failure"
+  },
+  "benchmarks": {
+    "specgap": {
+      "development": ["sg_075"],
+      "formal": ["sg_076"]
+    },
+    "silentswap": {
+      "development": ["ss_075"],
+      "formal": ["ss_076"]
+    },
+    "feedbacktrace": {
+      "development": ["ft_075_long"],
+      "formal": ["ft_076_long"]
+    }
+  }
+}

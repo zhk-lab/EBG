@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG Relations",
+  "type": "array",
+  "items": {
+    "oneOf": [
+      {"$ref": "#/$defs/repo_edge"},
+      {"$ref": "#/$defs/trace_edge"}
+    ]
+  },
+  "$defs": {
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^E[0-9]{6}$"}
+    },
+    "repo_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge_id", "from", "type", "to", "via", "evidence_ids"],
+      "properties": {
+        "edge_id": {"type": "string", "pattern": "^R[0-9]{4,}$"},
+        "from": {"$ref": "#/$defs/endpoint"},
+        "type": {"enum": ["calls", "feeds"]},
+        "to": {"$ref": "#/$defs/endpoint"},
+        "via": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        },
+        "evidence_ids": {"$ref": "#/$defs/evidence_ids"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "calls"}}},
+          "then": {"properties": {"via": {"type": "null"}}}
+        }
+      ]
+    },
+    "trace_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge_id", "source_task_id", "type", "target_task_id", "evidence_ids"],
+      "properties": {
+        "edge_id": {"type": "string", "pattern": "^R[0-9]{4,}$"},
+        "source_task_id": {"type": "string", "pattern": "^K[0-9]{4,}$"},
+        "type": {"enum": ["informs", "supersedes"]},
+        "target_task_id": {"type": "string", "pattern": "^K[0-9]{4,}$"},
+        "evidence_ids": {"$ref": "#/$defs/evidence_ids"}
+      }
+    }
+  }
+}

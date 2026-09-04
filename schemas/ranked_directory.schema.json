@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG Repo Ranked Directory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_id",
+    "benchmark",
+    "directory_type",
+    "token_budget",
+    "token_count",
+    "entries",
+    "query_index"
+  ],
+  "properties": {
+    "input_id": {"type": "string", "minLength": 1},
+    "benchmark": {"enum": ["specgap", "silentswap"]},
+    "directory_type": {"const": "repo"},
+    "token_budget": {"const": 3072},
+    "token_count": {"type": "integer", "minimum": 0, "maximum": 3072},
+    "entries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/repo_entry"}
+    },
+    "query_index": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/file_index_entry"}
+    }
+  },
+  "$defs": {
+    "repo_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read_id", "path", "related_document_sections", "code_hints"],
+      "properties": {
+        "read_id": {"type": "string", "pattern": "^F[0-9]{4,}$"},
+        "path": {"type": "string", "minLength": 1},
+        "related_document_sections": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "code_hints": {"type": "string", "minLength": 1}
+      }
+    },
+    "file_index_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read_id", "path", "root_symbols"],
+      "properties": {
+        "read_id": {"type": "string", "pattern": "^F[0-9]{4,}$"},
+        "path": {"type": "string", "minLength": 1},
+        "root_symbols": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

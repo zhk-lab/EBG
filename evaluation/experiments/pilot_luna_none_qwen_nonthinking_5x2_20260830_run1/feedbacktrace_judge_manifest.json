@@ -1,0 +1,31 @@
+{
+  "schema_version": 3,
+  "benchmark": "feedbacktrace",
+  "phase": "development",
+  "selected_ids": [
+    "ft_001_long",
+    "ft_007_long",
+    "ft_013_long",
+    "ft_025_long",
+    "ft_037_long",
+    "ft_050_long",
+    "ft_062_long",
+    "ft_075_long",
+    "ft_087_long",
+    "ft_100_long"
+  ],
+  "arms": [
+    "graph",
+    "raw"
+  ],
+  "prediction_model": "gpt-5-6-luna",
+  "prediction_thinking": "omitted",
+  "prediction_reasoning_effort": "none",
+  "prediction_contract": "key_only_original_evidence_ids_v1",
+  "judge_model": "qwen3.7-max-2026-06-08",
+  "judge_profile": "official-desktop-v1",
+  "judge_thinking": "disabled",
+  "network_retries": 2,
+  "format_repairs": 1,
+  "max_output_tokens": 32768
+}

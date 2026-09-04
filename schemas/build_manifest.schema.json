@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG Build Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "method", "input_id", "benchmark", "counts", "outputs"],
+  "properties": {
+    "schema_version": {"const": 3},
+    "method": {"const": "BEG"},
+    "input_id": {"type": "string", "minLength": 1},
+    "benchmark": {"enum": ["specgap", "silentswap", "feedbacktrace"]},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible_repository_files", "retained_production_artifacts", "excluded_repository_files", "l3_facts", "behaviors", "edges", "symbols", "graph_edges", "trace_events"],
+      "properties": {
+        "visible_repository_files": {"type": "integer", "minimum": 0},
+        "retained_production_artifacts": {"type": "integer", "minimum": 0},
+        "excluded_repository_files": {"type": "integer", "minimum": 0},
+        "l3_facts": {"type": "integer", "minimum": 1},
+        "behaviors": {"type": "integer", "minimum": 1},
+        "edges": {"type": "integer", "minimum": 0},
+        "symbols": {"type": "integer", "minimum": 0},
+        "graph_edges": {"type": "integer", "minimum": 0},
+        "trace_events": {"type": "integer", "minimum": 0}
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

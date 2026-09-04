@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG SpecGap Prediction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input_id", "benchmark", "findings"],
+  "properties": {
+    "input_id": {"type": "string", "minLength": 1},
+    "benchmark": {"const": "specgap"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "claim",
+        "verification_question",
+        "why_important",
+        "downstream_impact",
+        "code_evidence"
+      ],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "claim": {"type": "string", "minLength": 1},
+        "verification_question": {"type": "string", "minLength": 1},
+        "why_important": {"type": "string", "minLength": 1},
+        "downstream_impact": {"type": "string", "minLength": 1},
+        "code_evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/code_evidence"}
+        }
+      }
+    },
+    "code_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "end_line", "symbol", "explanation"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1},
+        "symbol": {"type": "string", "minLength": 1},
+        "explanation": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

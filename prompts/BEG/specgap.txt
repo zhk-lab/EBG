@@ -1,0 +1,112 @@
+Your task is SpecGap recovery. The TASK DOCUMENT contains the complete
+`document_after`: an otherwise largely complete task document from which a small number
+of externally meaningful implemented rules may have been removed. Compare it with the
+current production implementation and report only material contracts that the document
+no longer states or clearly implies.
+
+INPUT AND GRAPH FORMAT
+
+- RUN INPUT identifies the sample. The runner adds `input_id` and `benchmark` after
+  validation; never put them inside `finish.prediction`.
+- TASK DOCUMENT is the complete current documentation baseline. It usually still names
+  the relevant API, class, function, or topic; the missing part may be one condition,
+  default, exception, ordering rule, data reference, or result. Search the whole
+  document for equivalent wording before treating a rule as missing.
+- A graph INITIAL REPOSITORY INDEX is a ranked file table. Each row contains an F Read
+  ID, repository path, related document sections, and a few code hints. Direct document
+  matches rank first, followed by one-hop graph neighbors and remaining production
+  files. Rows and hints are neutral navigation, not findings or complete behavior
+  descriptions.
+- A paired Raw view may instead list R source-file IDs. The task and proof standard are
+  unchanged.
+- Reading an F ID returns a linear Local Graph JSON. Each complete Node contains a path,
+  Symbol, line range, compact Behavior references, and continuous numbered `source`.
+  A file ID such as F0001 reads the directly and unambiguously matched roots that fit
+  the atomic read limit; an exact search may return a stable root-specific ID such as
+  F0001.S0002 for another scope. Each `graphs[]` item contains one `root` and its
+  paths. Every `paths[]` entry is a real route whose `steps[]` place a direct `edge`
+  immediately before the reached `node`.
+  Treat only literal Node `source` as implementation evidence; Behavior roles, edges,
+  refs, and search hits are navigation. Reading an R ID returns original numbered source.
+
+REVIEW WORKFLOW AND PROOF STANDARD
+
+Start with the smallest set of top-ranked files whose names and related sections most
+directly correspond to concrete document rules. Use one focused batch read. Request
+another search or read only for a named unresolved rule; directory entries are options,
+not a checklist, and the read limit is not a target. Review every returned source block
+before finish because one read may prove several independent omissions.
+
+For each candidate:
+
+1. Recover one exact current rule from current production source: its condition or
+   boundary, operation, and observable result. Check defaults, null/empty handling,
+   exceptions, ordering, state and fallback rules, data references, dependency
+   selection, integration behavior, and evaluation boundaries when present.
+2. Compare that rule with the complete TASK DOCUMENT, not only the nearby section.
+   Paraphrases and rules clearly entailed by the document are already covered.
+3. Keep it only when misunderstanding the omitted rule could materially change public
+   use, output, compatibility, integration, evaluation, or a success claim.
+4. Follow related files only as far as needed to complete the same rule. Use search only
+   when the visible directory and already named related files do not expose the
+   responsible code.
+5. Merge branches or locations that prove the same condition-to-result contract. Keep
+   rules separate when they require different verification questions, even if they
+   share a function.
+
+Reject documented or clearly implied rules, private implementation preferences without
+material external effect, vague possibilities without a concrete implementation, and
+claims supported only by directory rows, search hits, Behavior labels, or edges. An
+empty `findings` array is correct when no material omission is supported.
+
+OUTPUT CONTRACT
+
+Use exactly this object inside the finish action:
+
+```json
+{
+  "findings": [
+    {
+      "finding_id": "F001",
+      "claim": "one atomic implemented contract missing from the document",
+      "verification_question": "one concrete question that resolves this contract",
+      "why_important": "why this omission matters in practice",
+      "downstream_impact": "what behavior or decision can change",
+      "code_evidence": [
+        {
+          "path": "exact/repository/path.py",
+          "start_line": 10,
+          "end_line": 14,
+          "symbol": "Exact.enclosing_symbol",
+          "explanation": "what these lines directly establish"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Do not add fields outside this shape.
+
+- `findings`: all supported material omissions, ordered by importance and confidence;
+  there is no target count.
+- `finding_id`: a unique answer-local ID such as `F001`; it is unrelated to a
+  repository Read ID such as `F0001`.
+- `claim`: one precise missing rule, preferably condition -> result when applicable.
+- `verification_question`: one user-answerable question about that same rule.
+- `why_important`: why the missing specification matters in practice.
+- `downstream_impact`: the concrete behavior, integration, evaluation, or decision that
+  could change.
+- `code_evidence`: direct production locations returned by read. Use the exact path,
+  owning Symbol, and smallest inclusive lines that prove the claim. Use separate entries
+  for necessary non-contiguous or cross-Symbol ranges.
+
+FINAL CHECK
+
+Before finish, verify that every finding is materially external, absent from the complete
+TASK DOCUMENT, non-duplicate, and supported by literal source returned by read. Compare
+the claimed current behavior with the exact displayed lines: it must paraphrase what the
+code actually does, not a plausible implementation it could have used. SpecGap is not
+an implementation-bug or general code/document-conflict task. Each round must return
+exactly one action. When you have the answer and the evidence is sufficient, return
+finish. Check the JSON action format carefully.

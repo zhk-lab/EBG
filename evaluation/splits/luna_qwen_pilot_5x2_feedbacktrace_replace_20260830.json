@@ -1,0 +1,22 @@
+{
+  "split_id": "luna_qwen_pilot_5x2_feedbacktrace_replace_20260830",
+  "selection": {
+    "development_count": 5,
+    "formal_count": 5,
+    "method": "deterministic replacement IDs without Gold inspection"
+  },
+  "benchmarks": {
+    "specgap": {
+      "development": ["sg_001", "sg_025", "sg_050", "sg_075", "sg_100"],
+      "formal": ["sg_002", "sg_026", "sg_051", "sg_076", "sg_099"]
+    },
+    "silentswap": {
+      "development": ["ss_001", "ss_025", "ss_050", "ss_075", "ss_100"],
+      "formal": ["ss_002", "ss_026", "ss_051", "ss_076", "ss_099"]
+    },
+    "feedbacktrace": {
+      "development": ["ft_003_long", "ft_027_long", "ft_052_long", "ft_077_long", "ft_098_long"],
+      "formal": ["ft_002_long", "ft_026_long", "ft_051_long", "ft_076_long", "ft_099_long"]
+    }
+  }
+}

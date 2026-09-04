@@ -1,0 +1,40 @@
+# Python caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments and local configuration
+.venv/
+.env
+.env.*
+!.env.example
+
+# Private local documents
+*_PRIVATE*.md
+
+# Local scratch files
+.tmp/
+*.log
+*.tmp
+*.bak
+
+# Packaging output
+dist/
+build/
+*.egg-info/
+
+# Generated evaluation data and detailed model traces
+evaluation/*/artifacts/
+evaluation/experiments/**/runs/
+evaluation/experiments/**/judges/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

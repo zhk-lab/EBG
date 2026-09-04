@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG Behaviors",
+  "type": "array",
+  "items": {
+    "oneOf": [
+      {"$ref": "#/$defs/repo_behavior"},
+      {"$ref": "#/$defs/trace_behavior"}
+    ]
+  },
+  "$defs": {
+    "evidence_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^E[0-9]{6}$"}
+    },
+    "repo_behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "behavior_id",
+        "artifact_kind",
+        "path",
+        "symbol",
+        "symbol_lines",
+        "result_type",
+        "trigger_evidence_ids",
+        "operation_evidence_ids",
+        "result_evidence_ids"
+      ],
+      "properties": {
+        "behavior_id": {"type": "string", "pattern": "^B[0-9]{4,}$"},
+        "artifact_kind": {"enum": ["source", "runtime_template", "executable", "configuration"]},
+        "path": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1},
+        "symbol_lines": {
+          "type": "array",
+          "prefixItems": [
+            {"type": "integer", "minimum": 1},
+            {"type": "integer", "minimum": 1}
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "result_type": {"enum": ["return", "raise", "state_write", "output", "external_call", "yield"]},
+        "trigger_evidence_ids": {"$ref": "#/$defs/evidence_ids"},
+        "operation_evidence_ids": {"$ref": "#/$defs/evidence_ids"},
+        "result_evidence_ids": {
+          "allOf": [
+            {"$ref": "#/$defs/evidence_ids"},
+            {"minItems": 1}
+          ]
+        }
+      }
+    },
+    "trace_behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "behavior_id",
+        "task_id",
+        "sequence_index",
+        "start_turn",
+        "end_turn",
+        "demand_refs",
+        "action_evidence_ids",
+        "response_refs"
+      ],
+      "properties": {
+        "behavior_id": {"type": "string", "pattern": "^T[0-9]{4,}$"},
+        "task_id": {"type": "string", "pattern": "^K[0-9]{4,}$"},
+        "sequence_index": {"type": "integer", "minimum": 1},
+        "start_turn": {"type": "integer", "minimum": 0},
+        "end_turn": {"type": "integer", "minimum": 0},
+        "demand_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["evidence_id"],
+            "properties": {
+              "evidence_id": {"type": "string", "pattern": "^E[0-9]{6}$"},
+              "char_range": {
+                "type": "array",
+                "prefixItems": [
+                  {"type": "integer", "minimum": 0},
+                  {"type": "integer", "minimum": 1}
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "action_evidence_ids": {"$ref": "#/$defs/evidence_ids"},
+        "response_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["evidence_id"],
+            "properties": {
+              "evidence_id": {"type": "string", "pattern": "^E[0-9]{6}$"},
+              "char_range": {
+                "type": "array",
+                "prefixItems": [
+                  {"type": "integer", "minimum": 0},
+                  {"type": "integer", "minimum": 1}
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {"properties": {"action_evidence_ids": {"minItems": 1}}},
+        {"properties": {"response_refs": {"minItems": 1}}}
+      ]
+    }
+  }
+}

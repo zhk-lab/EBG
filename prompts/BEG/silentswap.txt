@@ -1,0 +1,151 @@
+Your task is SilentSwap recovery. The TASK DOCUMENT contains the complete
+`original_document`, which defines behavior BEFORE modification. Current production
+code is the AFTER implementation and contains exactly five independent, externally
+observable semantic substitutions. Find all five by proving concrete BEFORE -> AFTER
+differences from the document and source you actually read.
+
+INPUT AND GRAPH FORMAT
+
+- RUN INPUT identifies the sample. The runner adds `input_id` and `benchmark` after
+  validation; never put them inside `finish.prediction`.
+- TASK DOCUMENT is the complete BEFORE contract. Missing documentation alone is not a
+  swap: current code must contradict a concrete behavior stated or clearly implied by
+  this document.
+- A graph INITIAL REPOSITORY INDEX is a ranked file table. Each row contains an F Read
+  ID, current repository path, related original-document sections, and a few code hints.
+  Direct document matches rank first, followed by one-hop graph neighbors and remaining
+  production files. Rows and hints are neutral navigation, not swap evidence or complete
+  file descriptions.
+- A paired Raw view may instead list R source-file IDs. The task and proof standard are
+  unchanged.
+- Reading an F ID returns a linear Local Graph JSON. Each complete Node contains a path,
+  owning Symbol, line range, compact Behavior references, and continuous numbered
+  current `source`. A file ID such as F0001 reads the directly and unambiguously matched
+  roots that fit the atomic read limit; an exact search may return a stable root-specific
+  ID such as F0001.S0002 for another scope. Each `graphs[]` item contains one
+  `root` and its paths. Every `paths[]` entry is a real route whose `steps[]` place a direct
+  `edge` immediately before the reached `node`.
+  Compare literal AFTER Node `source` with the complete BEFORE TASK DOCUMENT. Behavior
+  roles, edges, refs, and search hits are navigation.
+  Reading an R ID returns original numbered source.
+
+REVIEW WORKFLOW AND PROOF STANDARD
+
+Start with the smallest set of top-ranked files whose names and related sections most
+directly correspond to concrete BEFORE rules. Include a named module field, constant,
+default, or configuration definition when the document gives it a concrete contract;
+these locations can implement a swap as directly as a public function. Use one focused
+batch read. Request another search or read only for a named unresolved swap; directory
+entries are options, not a checklist, and the read limit is not a target. Review every
+returned source block before finish because one read may prove several independent
+swaps.
+
+For each candidate, establish all four facts:
+
+1. BEFORE: the complete concrete behavior required by the original document.
+2. AFTER: the different current behavior literally established by source returned by
+   read.
+3. Distinguishing trigger: the smallest reproducible input, boundary, configuration, or
+   state for which BEFORE and AFTER differ.
+4. Responsible location: the smallest inclusive current-code range and final owning
+   Symbol. Include every necessary non-contiguous location implementing the same swap.
+
+Always compare in this direction: original document BEFORE -> current code AFTER ->
+semantic difference. Check conditions, validation boundaries, defaults, null/empty
+handling, exceptions, ordering, parsing/matching, state, representation, routing, data
+flow, and dependency selection.
+
+TARGET AND GROUPING RULES
+
+- An `@property` definition is a `method`, not a field. A top-level assignment is a
+  `field` named by its left-hand side. A nested function uses its complete lexical name,
+  including every enclosing function or class.
+- When one documented rule is implemented across sibling methods, assignments, or
+  branches, report one swap under their smallest common class or lexical owner and cite
+  all responsible non-contiguous ranges.
+- A source-region owner names a local owner; it is not automatically the final target
+  when one swap spans sibling or nested Symbols.
+- Keep different documented rules separate when their triggers or outcomes differ, even
+  inside one function. Merge only repeated implementations of the same BEFORE rule,
+  distinguishing trigger, and outcome.
+- Cite the smallest exact operation lines from Node `source`, not an entire function.
+  If a contributing regular expression, allow-list, mapping, default table, or state
+  value has not been read, the candidate remains unresolved.
+
+Maintain five distinct candidate slots. Fill a slot only after read pairs one concrete
+BEFORE rule with contradictory literal AFTER source. Compare slots by rule, trigger,
+current operation, and outcome so repeated manifestations merge while independent
+substitutions remain separate. Reject refactors without observable semantic change,
+current behavior compatible with the document, documentation omissions without a
+contradiction, private implementation differences, unsupported speculation, and
+duplicates.
+
+SWAP TYPE MEANINGS
+
+- `input_validation_boundary`: accepted types, values, ranges, or validity limits changed.
+- `parsing_matching`: tokenization, extraction, regular-expression, prefix, or matching
+  behavior changed.
+- `ordering_precedence`: execution order or precedence between choices changed.
+- `default_null_fallback`: missing, None, falsey, empty, sentinel, default, or fallback
+  handling changed.
+- `exception_error_handling`: exception type, propagation, suppression, or error text
+  changed.
+- `state_identity_lifecycle`: persistence, cache, mutation, identity, or lifecycle changed.
+- `representation_normalization`: format, structure, unit, serialization, or
+  normalization changed.
+- `dispatch_routing_aggregation`: dispatch, routing, aggregation, callback completion,
+  or strategy selection changed.
+
+OUTPUT CONTRACT
+
+Use exactly this object inside the finish action, with exactly five swap objects:
+
+```json
+{
+  "swaps": [
+    {
+      "target": {
+        "file": "exact/repository/path.py",
+        "symbol": {
+          "kind": "function",
+          "qualified_name": ["source_identifier"]
+        },
+        "line_ranges": [{"start": 10, "end": 14}]
+      },
+      "swap_type": "one allowed taxonomy value",
+      "code_change": "original operation -> current operation",
+      "trigger_condition": "minimal reproducible distinguishing condition",
+      "behavioral_effect": {
+        "before": "complete original documented outcome",
+        "after": "complete current implemented outcome"
+      }
+    }
+  ]
+}
+```
+
+Repeat the swap object until `swaps` has exactly five distinct entries. Do not add fields
+outside this shape.
+
+- `target.file`: the exact path returned by read.
+- `target.symbol.kind`: one of `function`, `method`, `class`, `field`, or `module`. A
+  top-level assignment uses `field`; a true module-level operation with no assigned
+  field uses `module` and `qualified_name: []`.
+- `target.symbol.qualified_name`: source identifiers in lexical nesting order, such as
+  `["Catalog", "load"]`; omit modules, parentheses, and parameters.
+- `target.line_ranges`: the smallest displayed inclusive ranges responsible for the
+  substitution; use separate entries for non-contiguous lines.
+- `swap_type`: the one taxonomy value that best fits.
+- `code_change`: state both concrete operations in the correct BEFORE -> AFTER direction.
+- `trigger_condition`: the minimal reproducible condition separating the behaviors.
+- `behavioral_effect.before` and `.after`: complete concrete outcomes, not vague impact.
+
+FINAL CHECK
+
+Before finish, confirm that all five swaps are mutually distinct and each pairs a
+concrete BEFORE rule with literal contradictory AFTER source returned by read. Recheck
+the exact current lines: every AFTER clause must paraphrase what the code actually does,
+not a plausible mutation it could have made. Confirm the direction, count, target owner,
+and smallest responsible line ranges, and merge repeated locations of one operation.
+Each round must return exactly one action. When you have the answer and the evidence is
+sufficient, return finish. Check the JSON action format carefully.

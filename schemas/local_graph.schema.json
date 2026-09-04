@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG Repo Linear Local Graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["read_id", "graphs"],
+  "properties": {
+    "read_id": {
+      "type": "string",
+      "pattern": "^F[0-9]{4,}(?:\\.S[0-9]{4,})?$"
+    },
+    "graphs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/local_graph"}
+    }
+  },
+  "$defs": {
+    "lines": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 1},
+        {"type": "integer", "minimum": 1}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^E[0-9]{6}@[0-9]+(?:-[0-9]+)?$"
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "behavior_id", "result_type", "trigger", "operation", "result"
+      ],
+      "properties": {
+        "behavior_id": {"type": "string", "pattern": "^B[0-9]{4,}$"},
+        "result_type": {
+          "enum": ["return", "raise", "state_write", "output", "external_call", "yield"]
+        },
+        "trigger": {"$ref": "#/$defs/evidence_refs"},
+        "operation": {"$ref": "#/$defs/evidence_refs"},
+        "result": {
+          "allOf": [
+            {"$ref": "#/$defs/evidence_refs"},
+            {"minItems": 1}
+          ]
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "symbol", "lines", "behaviors", "source"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "symbol": {"type": "string", "minLength": 1},
+        "lines": {"$ref": "#/$defs/lines"},
+        "behaviors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/behavior"}
+        },
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "node_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": {"type": "string", "minLength": 1}
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge", "node"],
+      "properties": {
+        "edge": {"type": "string", "minLength": 1},
+        "node": {
+          "oneOf": [
+            {"$ref": "#/$defs/node"},
+            {"$ref": "#/$defs/node_ref"}
+          ]
+        }
+      }
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path_id", "steps"],
+      "properties": {
+        "path_id": {"type": "string", "pattern": "^P[0-9]+$"},
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/step"}
+        }
+      }
+    },
+    "local_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "paths"],
+      "properties": {
+        "root": {
+          "oneOf": [
+            {"$ref": "#/$defs/node"},
+            {"$ref": "#/$defs/node_ref"}
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/path"}
+        }
+      }
+    }
+  }
+}
