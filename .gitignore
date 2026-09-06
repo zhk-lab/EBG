@@ -22,6 +22,10 @@ htmlcov/
 *.log
 *.tmp
 *.bak
+test_harness/
+/.agents/
+/.beg-harness/
+/.codex/
 
 # Packaging output
 dist/

@@ -1,0 +1,8 @@
+.venv/
+.state/
+.tmp-tests/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
