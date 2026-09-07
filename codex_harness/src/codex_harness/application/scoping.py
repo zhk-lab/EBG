@@ -19,7 +19,7 @@ def select_plan_task(log: SessionLog, session_id: str, plan_ids: list[str]) -> d
     sources = []
     for identifier in plan_ids:
         if not identifier.startswith('L') or not identifier[1:].isdigit():
-            raise HarnessError('Use Plan IDs from beg_list_task_sources.')
+            raise HarnessError('Use Plan IDs from the recorded sources.')
         plan = log.store.file(int(identifier[1:]))
         if Path(plan['root']) != root or Path(plan['path']).suffix.lower() not in {'.md', '.markdown'}:
             raise HarnessError('Plan must belong to the selected repository and be a Markdown file.')

@@ -46,6 +46,7 @@ class OpenAICompatibleJsonClient:
         thinking_parameter: str = "thinking",
         reasoning_effort: str | None = None,
         temperature: float | None = None,
+        request_options: dict[str, Any] | None = None,
         opener: Callable[..., Any] = urllib.request.urlopen,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
@@ -64,6 +65,7 @@ class OpenAICompatibleJsonClient:
         self.thinking_parameter = thinking_parameter
         self.reasoning_effort = reasoning_effort
         self.temperature = temperature
+        self.request_options = None if request_options is None else dict(request_options)
         self.opener = opener
 
     @property
@@ -84,6 +86,13 @@ class OpenAICompatibleJsonClient:
             "thinking": "disabled" if self.disable_thinking else "omitted",
             "reasoning_effort": self.reasoning_effort or "omitted",
         }
+        if self.request_options is not None:
+            profile.update(
+                temperature=self.request_options.get("temperature", "provider_default"),
+                thinking=self.request_options.get("thinking", "omitted"),
+                reasoning_effort=self.request_options.get("reasoning_effort", "omitted"),
+                request_options=self.request_options,
+            )
         return profile
 
     def complete(
@@ -110,6 +119,10 @@ class OpenAICompatibleJsonClient:
             payload["reasoning_effort"] = (
                 "low" if self.reasoning_effort == "light" else self.reasoning_effort
             )
+        if self.request_options is not None:
+            for key in ("temperature", "thinking", "enable_thinking", "reasoning_effort"):
+                payload.pop(key, None)
+            payload.update(self.request_options)
         request = urllib.request.Request(
             _chat_url(self.base_url),
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

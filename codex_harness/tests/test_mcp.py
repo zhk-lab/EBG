@@ -19,35 +19,6 @@ from codex_harness.hooks.lifecycle import handle_hook
 
 
 class MCPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_plan_only_flow_over_mcp_without_recorded_prompts(self):
-        with ProjectTemporaryDirectory() as root:
-            repo = root / 'repo'
-            repo.mkdir()
-            demand = 'app.py::run must return 2.'
-            (repo / 'BEG.md').write_text(demand, encoding='utf-8')
-            (repo / 'app.py').write_text('def run():\n    return 1\n', encoding='utf-8')
-            server = StdioServerParameters(command=sys.executable,
-                args=['-m', 'codex_harness', '--state-dir', str(root / 'state'), 'serve'], cwd=str(PROJECT_ROOT))
-            async with asyncio.timeout(45):
-                async with stdio_client(server) as (reader, writer):
-                    async with ClientSession(reader, writer) as session:
-                        await session.initialize()
-                        async def call(name, args):
-                            result = await session.call_tool(name, args)
-                            self.assertFalse(result.isError, result.content)
-                            return yaml.safe_load(result.content[0].text)
-                        listing = await call('beg_list_task_sources', {'repo_path': str(repo)})
-                        self.assertEqual(listing['prompts'], [])
-                        plan = listing['plans'][0]['id']
-                        selected = await call('beg_select_task', {'plan_ids': [plan]})
-                        result = await call('beg_build_evidence_groups', {'task_id': selected['task_id'],
-                            'requirements': [{'id': 'R1', 'check': demand,
-                                              'refs': [{'source_id': plan, 'quote': demand}]}]})
-                        self.assertIn('return 1', str(result['evidence_groups']['R1']['actual']['repo']))
-                        self.assertNotIn('changes', result)
-                        empty = await session.call_tool('beg_select_task', {})
-                        self.assertTrue(empty.isError)
-
     async def test_three_tools_complete_recorded_task_and_continue_frozen_reads(self):
         with ProjectTemporaryDirectory() as root:
             repo = root / 'repo'
@@ -68,38 +39,42 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     async with ClientSession(reader, writer) as session:
                         await session.initialize()
                         names = {t.name for t in (await session.list_tools()).tools}
-                        self.assertEqual(names, {'beg_context', 'beg_evidence', 'beg_list_task_sources',
-                                                 'beg_select_task', 'beg_build_evidence_groups'})
+                        self.assertEqual(names, {'beg_review', 'beg_evidence', 'beg_record'})
                         async def call(name, arguments):
                             response = await session.call_tool(name, arguments)
                             self.assertFalse(response.isError, response.content)
                             return yaml.safe_load(response.content[0].text)
-                        listing = await call('beg_list_task_sources', {})
-                        self.assertEqual(listing['prompts'][0]['content'], prompt)
-                        selected = await call('beg_select_task', {'start_prompt': 'P1', 'end_prompt': 'P1', 'plan_ids': []})
-                        task = selected['task_id']
-                        invalid = await session.call_tool('beg_build_evidence_groups', {'task_id': task})
-                        self.assertTrue(invalid.isError)
-                        result = await call('beg_build_evidence_groups', {'task_id': task, 'requirements': [
-                            {'id': 'R1', 'check': prompt, 'refs': [{'source_id': 'P1', 'quote': prompt}]}]})
-                        self.assertIn('R1', result['evidence_groups'])
-                        changes = await call('beg_build_evidence_groups', {'task_id': task, 'read_ref': result['changes']['read_ref']})
-                        ref = next(e['read_ref'] for e in changes['content'] if e['path'] == 'app.py')
-                        diff = await call('beg_build_evidence_groups', {'task_id': task, 'read_ref': ref})
-                        self.assertIn('-    return 1', diff['content'])
-                        self.assertIn('+    return 2', diff['content'])
-                        self.assertNotIn('UNRELATED', diff['content'])
-                        self.assertEqual(await call('beg_build_evidence_groups', {'task_id': task, 'read_ref': result['read_ref']}), result)
-                        active = await call('beg_context', {'trigger': 'result', 'focus': 'Report app.py behavior'})
+                        for removed in ('beg_list_task_sources', 'beg_select_task', 'beg_build_evidence_groups'):
+                            response = await session.call_tool(removed, {})
+                            self.assertTrue(response.isError)
+                        active = await call('beg_review', {'trigger': 'result', 'focus': 'Report app.py behavior'})
+                        self.assertNotIn('code_evidence', active)
+                        self.assertNotIn('UNRELATED LIVE CODE', str(active))
                         check_id = active['check_id']
+                        review_copy = await call('beg_evidence', {'check_id': check_id, 'read_ref': active['read_ref']})
+                        self.assertEqual(review_copy, active)
                         code.write_text('CHANGED AFTER CHECK', encoding='utf-8')
                         proof = await call('beg_evidence', {'check_id': check_id, 'question': 'What is in app.py?',
                             'refs': [{'source_id': 'P1', 'quote': prompt}]})
                         self.assertIn('questions', proof)
                         self.assertNotIn('CHANGED AFTER CHECK', str(proof))
-                        done = await call('beg_context', {'check_id': check_id, 'conclusion': 'issue',
+                        self.assertIn('UNRELATED LIVE CODE', str(proof))
+                        changes = await call('beg_evidence', {'check_id': check_id,
+                            'read_ref': proof['changes']['read_ref']})
+                        ref = next(e['read_ref'] for e in changes['content'] if e['path'] == 'app.py')
+                        diff = await call('beg_evidence', {'check_id': check_id, 'read_ref': ref})
+                        self.assertIn('-    return 2', diff['content'])
+                        self.assertIn('+UNRELATED LIVE CODE', diff['content'])
+                        self.assertNotIn('CHANGED AFTER CHECK', diff['content'])
+                        reread = await call('beg_evidence', {'check_id': check_id, 'read_ref': proof['read_ref']})
+                        self.assertEqual(reread, proof)
+                        done = await call('beg_record', {'check_id': check_id, 'conclusion': 'issue',
                                                          'summary': 'Current code differs from the reported implementation.'})
-                        self.assertEqual(done['assessment']['conclusion'], 'issue')
+                        self.assertEqual(done['conclusion'], 'issue')
+                        self.assertTrue(done['recorded'])
+                        self.assertNotIn('review_protocol', done)
+                        final = await call('beg_review', {'check_id': check_id})
+                        self.assertEqual(final['assessment']['conclusion'], 'issue')
 
     def test_hook_cli_stdout_is_json_and_does_not_block_turn(self):
         with ProjectTemporaryDirectory() as root:

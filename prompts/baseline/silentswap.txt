@@ -23,11 +23,14 @@ INPUT AND SOURCE FORMAT
 
 REVIEW WORKFLOW AND PROOF STANDARD
 
-Start with the smallest set of files whose paths, APIs, fields, constants, or defaults
-are named or clearly implied by concrete BEFORE rules. Use one focused batch read.
-Request another search or read only for a named unresolved swap; directory entries are
-options, not a checklist, and the read limit is not a target. Review every returned
-source block before finish because one file may prove several independent swaps.
+Start with the smallest set of files whose paths or APIs are named or clearly implied
+by concrete BEFORE rules. Include a named module field, constant,
+default, or configuration definition when the document gives it a concrete contract;
+these locations can implement a swap as directly as a public function. Use one focused
+batch read. Request another search or read only for a named unresolved swap; directory
+entries are options, not a checklist, and the read limit is not a target. Review every
+returned source block before finish because one read may prove several independent
+swaps.
 
 For each candidate, establish all four facts:
 
@@ -52,12 +55,14 @@ TARGET AND GROUPING RULES
 - When one documented rule is implemented across sibling methods, assignments, or
   branches, report one swap under their smallest common class or lexical owner and cite
   all responsible non-contiguous ranges.
+- A source-region owner names a local owner; it is not automatically the final target
+  when one swap spans sibling or nested Symbols.
 - Keep different documented rules separate when their triggers or outcomes differ, even
   inside one function. Merge only repeated implementations of the same BEFORE rule,
   distinguishing trigger, and outcome.
-- Cite the smallest exact operation lines, not an entire function. If a contributing
-  regular expression, allow-list, mapping, default table, or state value has not been
-  read, the candidate remains unresolved.
+- Cite the smallest exact operation lines from the numbered source, not an entire function.
+  If a contributing regular expression, allow-list, mapping, default table, or state
+  value has not been read, the candidate remains unresolved.
 
 Maintain five distinct candidate slots. Fill a slot only after read pairs one concrete
 BEFORE rule with contradictory literal AFTER source. Compare slots by rule, trigger,

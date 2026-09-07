@@ -490,6 +490,13 @@ F0003 | src/patchy/cache.py | PatchingCache.store | exact symbol; source: maxsiz
 
 两端必须使用同一模型、reasoning 配置、最大轮数、输出上限、样本、任务定义和 Judge。Prompt 只解释各自会看到的证据格式，不能暗示哪一端更可靠。
 
+### Trace：Trace Runner
+
+FeedbackTrace 不使用 Repo AgentLoop。Raw Trace baseline 一次读取完整原始轨迹；BEG 一次读取模块六生成的完整 Task Scope JSON 图。正式样本都存在一个重要的 Verification Point，模型只输出该验证点、支撑 Evidence 和严重程度；程序保存时统一补充 `verdict: KEY`。两端使用同一模型、Prompt 任务定义、输出上限、Prediction Schema 和 Judge。
+
+Trace 图必须保留每个 Behavior 内的全部原事件及原顺序；没有形成 Behavior 的孤立用户事件不进入模型图。Behavior 通过 `task_id` 归入 Task Scope，并按 `sequence_index` 恢复顺序；`informs/supersedes` 只表达有原始 Evidence 支撑的跨任务信息传递或替换。
+
+
 ### Repo：当前冻结配置
 
 | 配置 | 值 |
@@ -508,22 +515,3 @@ F0003 | src/patchy/cache.py | PatchingCache.store | exact symbol; source: maxsiz
 | 网络重试/格式修正 | 最多 2 / 2 次 |
 
 上下文达到 131072 token 才启动压缩，目标为 98304 token。压缩只删除已被后续 read 完整消费或已重复的旧 search 结果，以及已有完整副本的重复源码；完整任务文档、所有唯一 Local Graph、Evidence 行和当前运行状态始终保留，必要时允许高于目标值。
-
-### Trace：Trace Runner
-
-FeedbackTrace 不使用 Repo AgentLoop。Raw Trace baseline 一次读取完整原始轨迹；BEG 一次读取模块六生成的完整 Task Scope JSON 图。正式样本都存在一个重要的 Verification Point，模型只输出该验证点、支撑 Evidence 和严重程度；程序保存时统一补充 `verdict: KEY`。两端使用同一模型、Prompt 任务定义、输出上限、Prediction Schema 和 Judge。
-
-Trace 图必须保留每个 Behavior 内的全部原事件及原顺序；没有形成 Behavior 的孤立用户事件不进入模型图。Behavior 通过 `task_id` 归入 Task Scope，并按 `sequence_index` 恢复顺序；`informs/supersedes` 只表达有原始 Evidence 支撑的跨任务信息传递或替换。
-
-## 9. 作用域化关系设计
-
-Scope-based Relation Factorization（基于作用域的关系分解）
-
-BEG 用作用域和顺序字段代替重复、弱语义的 Behavior 边：Evidence 组成完整 Behavior，Behavior 再归入 Scope。逻辑上的 `contains` 由 `path + symbol` 或 `task_id` 直接表达，源码或交互顺序由位置字段表达，不必额外生成关系边。
-
-| | Scope | Scope 间关系 | Scope 内 Behavior |
-|---|---|---|---|
-| Repo | `path + symbol` | `calls / feeds` | `trigger / operation / result` |
-| Trace | `task_id` | `informs / supersedes` | `demand / action / response`，按 `sequence_index` 排列 |
-
-同一 Scope 的 Behavior 共享任务或代码语境，但不自动继承彼此的动作、结果或授权。这样既统一了 Repo 与 Trace 的结构，也只保留真正跨作用域、可由原始 Evidence 证明的关系。

@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 import jsonschema
 
 from beg.core.errors import GraphError
-from scripts.graph_pipeline import build_graph_artifacts, validate_output
+from scripts.main.prepare import build_graph_artifacts, validate_output
 from tests.support import ProjectTemporaryDirectory, make_repo_bundle
 
 

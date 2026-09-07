@@ -15,7 +15,7 @@ class IntegrationTests(unittest.TestCase):
             skill = package / 'skills' / 'beg-disclose'
             (skill / 'references').mkdir(parents=True)
             (skill / 'SKILL.md').write_text(
-                'For full review, read [workflow](references/tool-workflows.md).', encoding='utf-8')
+                'For evidence lookup, read [workflow](references/tool-workflows.md).', encoding='utf-8')
             reference = skill / 'references' / 'tool-workflows.md'
             reference.write_text('Use the original sources and frozen evidence.', encoding='utf-8')
             output = root / 'integration'

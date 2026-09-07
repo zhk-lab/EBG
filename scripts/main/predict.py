@@ -1,22 +1,280 @@
-"""Resumable batch runner for paired Repo and BEG predictions."""
+"""Run single-sample or batch baseline/BEG predictions."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
+from urllib.parse import urlsplit
 
-from agentloop.benchmark_configs import PredictionRequestConfig, repo_benchmark_config
-from scripts.agentloop_cli import PROJECT_ROOT, _run as run_single_sample
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from agentloop import (
+    AgentLoop,
+    DEFAULT_CONFIG as AGENTLOOP_CONFIG,
+    OpenAICompatibleJsonClient,
+    RawBackend,
+    RunStore,
+    prepare_initial_request,
+)
+from agentloop.benchmark_configs import repo_benchmark_config
+from agentloop.errors import AgentLoopError
+from beg.behavior_directory import DIRECTORY_ENCODING
+from beg.evidence_intake import load_visible_bundle
+from evaluation_core.contracts import load_prediction_schema
+from evaluation_core.messages import (
+    build_baseline_messages,
+    build_trace_review_messages,
+    load_task_prompt,
+)
+from scripts.main.prepare import token_counter, validate_directory_artifact
+from scripts.model_config import (
+    add_model_arguments,
+    apply_model_settings,
+    public_settings,
+)
+from tracereview import (
+    DEFAULT_CONFIG as TRACE_REVIEW_CONFIG,
+    TraceReview,
+    prepare_trace_request,
+    render_raw_trace_payload,
+    render_trace_view,
+)
+
+
+def _run(args: argparse.Namespace) -> dict[str, Any]:
+    artifact_root = (
+        Path(args.artifact_root)
+        if args.artifact_root
+        else PROJECT_ROOT / "evaluation" / args.benchmark / "artifacts"
+    )
+    store = RunStore(args.output)
+
+    if args.benchmark == "feedbacktrace":
+        if args.arm == "graph":
+            graph = _load_graph(artifact_root, args.input_id)
+            view = render_trace_view(graph)
+            messages = build_trace_review_messages(
+                input_id=view.input_id,
+                task_prompt=load_task_prompt("BEG", "feedbacktrace"),
+                trace_view=view.text,
+            )
+            prompt_variant = "BEG"
+        else:
+            payload = _load_raw_trace_payload(artifact_root, args.input_id)
+            view = render_raw_trace_payload(payload)
+            messages = build_baseline_messages(
+                "feedbacktrace",
+                trace_payload=payload,
+            )
+            prompt_variant = "baseline"
+        schema = load_prediction_schema(args.schema_root, "feedbacktrace")
+        token_count, request_policy = prepare_trace_request(
+            messages,
+            config=TRACE_REVIEW_CONFIG,
+        )
+        store.save_trace_view(view.text)
+        store.save_request_if_unchanged(
+            1,
+            messages=messages,
+            token_count=token_count,
+            compression=request_policy,
+            provider_retry=0,
+        )
+        if args.prepare_only:
+            return {
+                "status": "prepared",
+                "input_id": args.input_id,
+                "benchmark": args.benchmark,
+                "arm": args.arm,
+                "prompt_variant": prompt_variant,
+                "estimated_input_tokens": token_count,
+            }
+        client = _client(args)
+        prediction = TraceReview(
+            view=view,
+            messages=messages,
+            prediction_schema=schema,
+            client=client,
+            store=store,
+            config=TRACE_REVIEW_CONFIG,
+        ).run()
+        return {
+            "status": "complete",
+            "input_id": args.input_id,
+            "benchmark": args.benchmark,
+            "arm": args.arm,
+            "prompt_variant": prompt_variant,
+            "turns": 1,
+            "prediction": prediction,
+        }
+
+    bundle = load_visible_bundle(
+        artifact_root / "visible_bundles" / args.input_id
+    )
+    if bundle.task_document is None:
+        raise AgentLoopError("Repo benchmark bundle lacks its task document")
+    benchmark_config = repo_benchmark_config(args.benchmark)
+    benchmark_config.validate_for(bundle.benchmark)
+    count_directory_tokens = token_counter(DIRECTORY_ENCODING)
+    prompt_variant = "baseline" if args.arm == "raw" else "BEG"
+    if args.arm == "raw":
+        backend = RawBackend(
+            bundle,
+            index_budget=AGENTLOOP_CONFIG.index_budget,
+            count_tokens=count_directory_tokens,
+        )
+    else:
+        from agentloop.graph_backend import GraphBackend
+
+        graph = _load_graph(artifact_root, args.input_id)
+        directory_root = (
+            artifact_root
+            / "behavior_directories"
+            / args.input_id
+        )
+        graph_root = artifact_root / "behavior_graphs" / args.input_id
+        directory_summary = validate_directory_artifact(
+            bundle.root,
+            graph_root,
+            directory_root,
+            encoding_name=DIRECTORY_ENCODING,
+        )
+        directory = _load_json(directory_root / "ranked_directory.json")
+        backend = GraphBackend(
+            bundle,
+            graph,
+            directory,
+            count_tokens=count_directory_tokens,
+        )
+        if backend.initial_index_tokens != int(directory_summary["token_count"]):
+            raise AgentLoopError("Ranked Directory token count changed during loading")
+    module7 = benchmark_config.bind_module7(
+        args.schema_root,
+        input_id=bundle.input_id,
+        task_document_name=bundle.task_document.path,
+        task_document=bundle.task_document.content,
+        initial_index=backend.initial_index,
+        prompt_variant=prompt_variant,
+    )
+    prepared = prepare_initial_request(
+        module7.initial_user_prompt,
+        module7.max_rounds,
+        config=AGENTLOOP_CONFIG,
+        priority_groups=backend.priority_groups,
+    )
+    store.save_request_if_unchanged(
+        1,
+        messages=list(prepared.messages),
+        token_count=prepared.token_count,
+        compression=prepared.manifest.to_dict(),
+        provider_retry=0,
+    )
+    if args.prepare_only:
+        return {
+            "status": "prepared",
+            "input_id": args.input_id,
+            "benchmark": args.benchmark,
+            "arm": args.arm,
+            "prompt_variant": prompt_variant,
+            "estimated_input_tokens": prepared.token_count,
+        }
+    client = _client(args)
+    outcome = AgentLoop(
+        backend=backend,
+        initial_user_prompt=module7.initial_user_prompt,
+        max_rounds=module7.max_rounds,
+        finish_contract=module7.finish_contract,
+        client=client,
+        store=store,
+        config=AGENTLOOP_CONFIG,
+    ).run()
+    return {
+        "status": outcome.status,
+        "input_id": args.input_id,
+        "benchmark": args.benchmark,
+        "arm": args.arm,
+        "prompt_variant": prompt_variant,
+        "turns": outcome.turns,
+        "prediction": outcome.prediction,
+        "failure": outcome.failure,
+    }
+
+
+def _client(args: argparse.Namespace) -> OpenAICompatibleJsonClient:
+    base_url = args.base_url or os.environ.get("BEG_API_BASE_URL", "")
+    model = args.model or os.environ.get("BEG_MODEL", "")
+    api_key = os.environ.get(args.api_key_env, "")
+    if not api_key and urlsplit(base_url).hostname == "127.0.0.1":
+        api_key = "unused-placeholder"
+    if not base_url or not model or not api_key:
+        raise AgentLoopError(
+            "set --base-url/BEG_API_BASE_URL, --model/BEG_MODEL, and "
+            f"the {args.api_key_env} environment variable"
+        )
+    return OpenAICompatibleJsonClient(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        timeout=args.timeout,
+        request_options=getattr(args, "request_options", {}),
+    )
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise AgentLoopError(f"expected a JSON object: {path}")
+    return value
+
+
+def _load_graph(artifact_root: Path, input_id: str) -> dict[str, Any]:
+    return _load_json(
+        artifact_root / "behavior_graphs" / input_id / "behavior_graph.json"
+    )
+
+
+def _load_raw_trace_payload(
+    artifact_root: Path, input_id: str
+) -> dict[str, Any]:
+    bundle_root = artifact_root / "visible_bundles" / input_id
+    load_visible_bundle(bundle_root)
+    payload = _load_json(bundle_root / "trace" / "model_input.json")
+    events = payload.get("events")
+    if payload.get("input_id") != input_id or not isinstance(events, list):
+        raise AgentLoopError("FeedbackTrace visible input is invalid")
+    selectable = sorted(
+        str(event["evidence_id"])
+        for event in events
+        if isinstance(event, dict) and event.get("evidence_id") is not None
+    )
+    return {
+        "input_id": input_id,
+        "track": "long",
+        "selectable_evidence_ids": selectable,
+        "events": events,
+    }
+
+
+run_single_sample = _run
+
+run_sample = _run
 
 BENCHMARKS = ("specgap", "silentswap", "feedbacktrace")
+
 ARMS = ("graph", "raw")
-PHASES = ("development", "formal")
-MANIFEST_VERSION = 3
+
+PHASES = ("development", "formal", "full")
+
+MANIFEST_VERSION = 4
 
 
 class BatchExperimentError(ValueError):
@@ -27,7 +285,7 @@ class BatchExperimentError(ValueError):
 class BatchConfig:
     experiment_name: str
     experiment_root: Path
-    split_file: Path
+    split_file: Path | None
     phase: str
     benchmarks: tuple[str, ...]
     arms: tuple[str, ...]
@@ -38,6 +296,8 @@ class BatchConfig:
     timeout: float = 600.0
     prepare_only: bool = False
     schema_root: Path = PROJECT_ROOT / "schemas"
+    request_options: dict[str, Any] | None = None
+    artifact_root: Path = PROJECT_ROOT / "evaluation"
 
     @property
     def output_root(self) -> Path:
@@ -58,6 +318,10 @@ class BatchConfig:
             raise BatchExperimentError("timeout must be positive")
         if not self.api_key_env.strip():
             raise BatchExperimentError("api_key_env must be non-empty")
+        if self.phase == "full" and self.split_file is not None:
+            raise BatchExperimentError("full evaluation does not use a split file")
+        if self.phase != "full" and self.split_file is None:
+            raise BatchExperimentError("development/formal evaluation requires --split-file")
 
 
 def load_split(path: Path) -> dict[str, Any]:
@@ -85,7 +349,7 @@ def load_split(path: Path) -> dict[str, Any]:
         if not isinstance(entry, dict):
             raise BatchExperimentError(f"split lacks benchmark {benchmark}")
         phases: dict[str, list[str]] = {}
-        for phase in PHASES:
+        for phase in ("development", "formal"):
             ids = entry.get(phase)
             if not isinstance(ids, list) or not ids:
                 raise BatchExperimentError(
@@ -131,7 +395,7 @@ def run_batch(
     """Run or resume every requested sample and write an aggregate summary."""
 
     config.validate()
-    split = load_split(config.split_file)
+    split = load_selection(config)
     manifest = _build_manifest(config, split)
     _freeze_manifest(config.output_root / "manifest.json", manifest)
     jobs = _jobs(config, split)
@@ -216,7 +480,7 @@ def _run_job(
         benchmark=benchmark,
         input_id=input_id,
         arm=arm,
-        artifact_root=None,
+        artifact_root=config.artifact_root / benchmark / "artifacts",
         output=run_root,
         schema_root=config.schema_root,
         base_url=config.base_url,
@@ -224,6 +488,7 @@ def _run_job(
         api_key_env=config.api_key_env,
         timeout=config.timeout,
         prepare_only=config.prepare_only,
+        request_options=config.request_options or {},
     )
     try:
         raw_result = run_one(args)
@@ -280,7 +545,7 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
     return {
         "schema_version": MANIFEST_VERSION,
         "experiment_name": config.experiment_name,
-        "split_file": str(config.split_file.resolve()),
+        "split_file": str(config.split_file.resolve()) if config.split_file else None,
         "split_id": split["split_id"],
         "phase": config.phase,
         "selected_ids": selected,
@@ -289,26 +554,31 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
         "model": config.model,
         "base_url": config.base_url.rstrip("/"),
         "prediction_requests": {
-            benchmark: _prediction_request(benchmark).public_dict()
+            benchmark: config.request_options or {}
             for benchmark in config.benchmarks
         },
+        "artifact_root": str(config.artifact_root.resolve()),
         "prompt_variants": {"raw": "baseline", "graph": "BEG"},
         "api_key_env": config.api_key_env,
         "timeout": config.timeout,
         "workers": config.workers,
         "prepare_only": config.prepare_only,
         "schema_root": str(config.schema_root.resolve()),
-        "single_sample_runner": "scripts.agentloop_cli._run",
+        "single_sample_runner": "scripts.main.predict._run",
     }
 
 
-def _prediction_request(benchmark: str) -> PredictionRequestConfig:
-    if benchmark == "feedbacktrace":
-        return PredictionRequestConfig(
-            thinking=None,
-            reasoning_effort="none",
-        )
-    return repo_benchmark_config(benchmark).prediction_request
+def load_selection(config: BatchConfig) -> dict[str, Any]:
+    if config.phase != "full":
+        return load_split(config.split_file)
+    selected: dict[str, Any] = {}
+    for benchmark in config.benchmarks:
+        root = config.artifact_root / benchmark / "artifacts" / "visible_bundles"
+        ids = sorted(path.name for path in root.iterdir() if path.is_dir())
+        if not ids:
+            raise BatchExperimentError(f"no visible samples for {benchmark}")
+        selected[benchmark] = {"full": ids}
+    return {"split_id": "full", "benchmarks": selected}
 
 
 def _freeze_manifest(path: Path, expected: dict[str, Any]) -> None:
@@ -389,6 +659,35 @@ def _print_event(value: dict[str, Any]) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    try:
+        settings = apply_model_settings(args)
+    except (OSError, ValueError) as error:
+        print(json.dumps({"status": "failed", "failure": str(error)}, ensure_ascii=False))
+        return 1
+    if args.show_config:
+        print(json.dumps(public_settings(settings), ensure_ascii=False, indent=2))
+        return 0
+    if args.input_id:
+        if not args.benchmark or len(args.benchmark) != 1:
+            raise SystemExit("--input-id requires exactly one --benchmark")
+        if args.arm and len(args.arm) != 1:
+            raise SystemExit("--input-id accepts exactly one --arm")
+        if args.output is None:
+            raise SystemExit("--input-id requires --output")
+        args.benchmark = args.benchmark[0]
+        args.arm = args.arm[0] if args.arm else "graph"
+        args.artifact_root = args.artifact_root / args.benchmark / "artifacts"
+        try:
+            result = run_sample(args)
+        except (OSError, ValueError) as error:
+            result = {"status": "failed", "failure": str(error)}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] in {"complete", "prepared"} else 1
+    if args.output is not None:
+        raise SystemExit("--output is only used with --input-id")
+    if not args.experiment_name:
+        print("--experiment-name is required unless --show-config is used")
+        return 1
     benchmarks = tuple(args.benchmark or BENCHMARKS)
     arms = tuple(args.arm or ARMS)
     config = BatchConfig(
@@ -405,6 +704,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         timeout=args.timeout,
         prepare_only=args.prepare_only,
         schema_root=args.schema_root,
+        request_options=args.request_options,
+        artifact_root=args.artifact_root,
     )
     try:
         summary = run_batch(config)
@@ -416,7 +717,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a frozen paired prediction batch.")
-    parser.add_argument("--experiment-name", required=True)
+    parser.add_argument("--experiment-name")
+    parser.add_argument("--input-id", help="Run one sample instead of a batch")
+    parser.add_argument("--output", type=Path, help="Output directory for --input-id")
     parser.add_argument(
         "--experiment-root",
         type=Path,
@@ -425,17 +728,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--split-file",
         type=Path,
-        default=PROJECT_ROOT / "evaluation" / "splits" / "luna_glm_20260826.json",
+        default=None,
     )
-    parser.add_argument("--phase", required=True, choices=PHASES)
+    parser.add_argument("--phase", default="full", choices=PHASES)
     parser.add_argument("--benchmark", action="append", choices=BENCHMARKS)
     parser.add_argument("--arm", action="append", choices=ARMS)
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--base-url", required=True)
+    add_model_arguments(parser)
     parser.add_argument("--workers", type=int, default=2)
-    parser.add_argument("--api-key-env", default="BEG_API_KEY")
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--schema-root", type=Path, default=PROJECT_ROOT / "schemas")
+    parser.add_argument("--artifact-root", type=Path, default=PROJECT_ROOT / "evaluation")
     parser.add_argument("--prepare-only", action="store_true")
     return parser
 

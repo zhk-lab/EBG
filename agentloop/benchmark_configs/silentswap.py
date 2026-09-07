@@ -2,7 +2,7 @@
 
 from evaluation_core.contracts import GROUNDING_PROFILES
 
-from .model import PredictionRequestConfig, RepoBenchmarkConfig
+from .model import RepoBenchmarkConfig
 
 
 CONFIG = RepoBenchmarkConfig(
@@ -15,8 +15,4 @@ CONFIG = RepoBenchmarkConfig(
     ),
     prediction_schema_filename="silentswap_prediction.schema.json",
     grounding_profile=GROUNDING_PROFILES["silentswap"],
-    prediction_request=PredictionRequestConfig(
-        thinking=None,
-        reasoning_effort="none",
-    ),
 )

@@ -1,4 +1,4 @@
-"""Freeze in-flight context, attach relevant code and support evidence follow-ups."""
+"""Freeze review inputs, investigate evidence on demand and record judgments."""
 
 from __future__ import annotations
 
@@ -8,9 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-import yaml
-
-from .repository import SOURCE_EXTENSIONS, capture
+from .repository import capture
 from .requirements import normalize_requirements
 from .storage import HarnessError, dumps
 
@@ -28,29 +26,25 @@ def _review_protocol() -> dict[str, str]:
         raise HarnessError('beg-disclose Skill is missing its Autoresearch review section.')
     return {'source': 'beg-disclose/SKILL.md :: Autoresearch review',
             'content': section.split('\n## ', 1)[0].strip(),
-            'note': 'Apply to research/optimization conclusions. This is review guidance, not a user requirement or a finding.'}
+            'note': 'Apply to research decisions and conclusions at the relevant disclosure stage. This is review guidance, not a user requirement or a finding.'}
 
 REVIEW_GUIDANCE = {
     'result': (
-        '从有效要求中找出拟采用或汇报的结论成立所需的前提，并对应实际执行证据。'
-        '验证完成声明需对应实际执行路径、覆盖范围与详细结果，不能以通过数量代替；'
-        '如要求真实外部调用，应核对实际请求及有效响应，替代实现的流程通过不满足该前提。'
-        '比较提升时，优先检查相对基线改变的路径及其输入来源是否满足适用条件；'
-        '评测文件固定、指标计算正确或命令成功，不足以证明实验可比。'
-        '涉及额外数据、缓存或替代实现时，沿项目提供的来源和依赖关系核实，'
-        '不能仅凭文件名、配置开关或表面编号判断条件成立。'
-        '需要核实实现时，将尚未得到支持的具体前提与原文引用交给 beg_evidence。'
+        '按 Skill 的结果审查部分核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
+        '追踪实际执行分支，核实测试及断言是否检验成功条件，判断数据、配置、资源与结果选择是否支持提升归因。'
+        '采用结果前先检查；不必每次内部试验都披露，在本轮汇报中说明实际完成情况与仍影响结论的重要限制。'
+        '若下一步需要解释关键歧义或实质改变原要求，先创建 ambiguity 或 adjustment 检查，再作决定。'
     ),
     'adjustment': (
-        '对应受阻步骤、有效要求和拟采用的替代方案，检查替代方案是否改变验证范围、'
-        '资源条件或可交付结论。已恢复的临时失败不继续当作交付问题；'
-        '替代命令成功也不自动证明原验证要求已满足。'
+        '按 Skill 的提前披露部分，核对原要求、受阻证据、拟采取的替代方案、影响和已有授权。'
+        '工具失败只是检查信号，不证明需要变更方案或向用户披露。'
+        '准备作出影响原要求的重要调整时，在落实前说明问题、做法及影响；需要用户取舍时先澄清。'
+        '普通重试或已修复并验证的临时失败不必反复报告，替代操作成功不等于原要求已满足。'
     ),
     'ambiguity': (
-        '区分用户明确要求、Agent 自拟计划与尚未确定的假设，'
-        '检查不同解释是否影响目标、范围或实验可比性。'
-        '没有明文规定不自动等于违规，也不自动等于任何实现都能支持原目标；'
-        '按已有授权处理，只有需要用户决定时才提问。'
+        '按 Skill 的提前披露部分，区分用户明确要求、Agent 自拟计划与未确定假设。'
+        '明确歧义、拟采用的解释及其对目标、约束、验收或实验结论的影响，在落实关键解释前披露。'
+        '没有明文规定不自动等于违规；已有授权内的常规决定可以继续，需要用户作出关键取舍时先澄清。'
     ),
 }
 
@@ -143,33 +137,14 @@ class Checks:
         self.put(check, new=True)
         return check
 
-    def context(self, check_id: str | None = None, *, trigger: str | None = None, focus: str | None = None,
-                event_ids: list[str] | None = None, plan_ids: list[str] | None = None,
-                read_ref: str | None = None, offset: int = 0,
-                conclusion: str | None = None, summary: str | None = None) -> str:
+    def review(self, check_id: str | None = None, *, trigger: str | None = None, focus: str | None = None,
+               event_ids: list[str] | None = None, plan_ids: list[str] | None = None) -> str:
         if check_id and any(v is not None for v in (trigger, focus, event_ids, plan_ids)):
             raise HarnessError('Read an existing checkpoint or create a new one, not both.')
-        if not check_id and (read_ref or offset or conclusion or summary):
-            raise HarnessError('Continuation and assessment require check_id.')
-        if read_ref and (conclusion is not None or summary is not None):
-            raise HarnessError('Read saved context or record an assessment, not both.')
-        if not read_ref and offset:
-            raise HarnessError('Continuation requires read_ref.')
         if not check_id and (not trigger or not focus):
             raise HarnessError('Supply check_id from the hook, or trigger and focus.')
         check = self.get(check_id) if check_id else self.create(trigger, focus, event_ids, plan_ids)
-        owner = f"context:{check['session_id']}"
-        if read_ref:
-            root = self.harness.pages.resolve(owner, read_ref.split('#')[0])
-            if root.get('check_id') != check['id']:
-                raise HarnessError('Context reference belongs to a different checkpoint.')
-            return self.harness.pages.read(owner, read_ref, offset)
-        if conclusion is not None or summary is not None:
-            if conclusion not in {'clear', 'issue', 'uncertain'} or not summary or not summary.strip():
-                raise HarnessError('Assessment needs clear/issue/uncertain and a nonempty summary.')
-            check['assessment'] = {'conclusion': conclusion, 'summary': summary.strip(),
-                                   'origin': 'agent judgment; not an independently verified verdict'}
-            self.put(check)
+        owner = f"review:{check['session_id']}"
         events = check['events']
         anchors = set(check['anchors'])
         if not anchors:
@@ -180,7 +155,6 @@ class Checks:
             # Include the question's whole turn, not an arbitrary last-N tail.
             turns = {e['turn_id'] for e in trace} or {check['turn_id']}
             trace = [e for e in events if e['turn_id'] in turns and e['kind'] != 'user']
-        evidence = self._initial_evidence(check, trace)
         latest = next((c for c in reversed(self.all()) if c.get('verification_call_id')), None)
         newer = latest is not None and latest['cutoff'] > check['cutoff']
         payload = {'check_id': check['id'], 'trigger': check['trigger'], 'focus': check['focus'],
@@ -191,20 +165,12 @@ class Checks:
                        'note': ('本检查点早于新的验证，不能支持该次验证的完成声明；请读取 latest_check_id。'
                                 if newer else '仅核对当前冻结材料；之后的新执行需重新检查。'),
                    },
-                   'note': '先核对原文与附带代码；需要补查时调用 beg_evidence。无匹配不等于无行为。核对后用 beg_context 记录 conclusion 和 summary；读取本身不代表完成。',
+                   'note': '先核对要求、执行记录和检查条目，不默认展开代码。发现疑点，即使尚不确定，也必须调用 beg_evidence；核实后用 beg_record 保存判断。读取或记录不等于向用户披露。',
                    'review_guidance': REVIEW_GUIDANCE[check['trigger']] +
                        '只披露证据支持且影响结论或决策的问题，不把尚未检查的可能性写成事实。',
                    'review_protocol': check.get('review_protocol', {}),
                    'prompts': [s for s in check['sources'] if s['kind'] == 'user'],
                    'plans': [s for s in check['sources'] if s['id'] in check['selected_plans']],
-                   'code_evidence': evidence['code'],
-                   'table_relations': evidence.get('tables', {}),
-                   'related_materials': evidence['materials'],
-                   'evidence_expansion': {
-                       'read_ref': evidence['read_ref'],
-                       'note': '上述代码与材料来自检查点快照。补查或展开这些证据时调用 beg_evidence(check_id, read_ref)，'
-                               '不是 beg_context；引用关系不证明实际使用或条件合规。',
-                   },
                    'trace': trace,
                    'plan_candidates': [{k: s[k] for k in ('id', 'path', 'label')}
                                        for s in check['sources'] if s['kind'] == 'plan'],
@@ -221,31 +187,16 @@ class Checks:
         ref = self.harness.pages.save(owner, payload)
         return self.harness.pages.read(owner, ref)
 
-    def _initial_evidence(self, check: dict[str, Any], trace: list[dict[str, Any]]) -> dict[str, Any]:
-        """Build once from original sources, so the first read includes code evidence."""
-        if 'initial_evidence' in check:
-            return check['initial_evidence']
-        selected = set(check['selected_plans'])
-        sources = [s for s in check['sources'] if s['kind'] == 'user' or s['id'] in selected]
-        sources += [e for e in trace if e['kind'] == 'tool_call']
-        refs = [{'source_id': s['id'], 'quote': s['content'], 'start': 0}
-                for s in sources if s['content'].strip()]
-        question = f"核对本次要求、执行入口及相关实现是否支持这一结果或决定：{check['focus']}"
-        # Use the same persisted evidence path as explicit follow-up questions.
-        page = yaml.safe_load(self.evidence(check['id'], question, refs))
-        ref = page['read_ref'].split('#', 1)[0]
-        root = self.harness.pages.resolve('evidence:check_' + check['id'], ref)
-        check['initial_evidence'] = {
-            'read_ref': ref,
-            'code': [entry for group in root['evidence_groups'].values()
-                     for entry in group.get('actual', {}).get('repo', [])
-                     if (path := entry['source'].split(':', 1)[-1].split('::', 1)[0]) in check['files']
-                     and Path(path).suffix.lower() in SOURCE_EXTENSIONS],
-            'materials': root.get('linked_artifacts', {}).get('items', []),
-            'tables': root.get('linked_artifacts', {}).get('table_relations', {}),
-        }
+    def record(self, check_id: str, conclusion: str, summary: str) -> str:
+        """Save the agent's judgment without rereading sources or building evidence."""
+        if conclusion not in {'clear', 'issue', 'uncertain'} or not summary or not summary.strip():
+            raise HarnessError('Assessment needs clear/issue/uncertain and a nonempty summary.')
+        check = self.get(check_id)
+        check['assessment'] = {'conclusion': conclusion, 'summary': summary.strip(),
+                               'origin': 'agent judgment; not an independently verified verdict'}
         self.put(check)
-        return check['initial_evidence']
+        return dumps({'check_id': check_id, 'recorded': True, 'conclusion': conclusion,
+                      'note': 'Recorded agent judgment; this does not establish user-facing disclosure.'})
 
     def evidence(self, check_id: str, question: str | None = None, refs: list[dict[str, Any]] | None = None,
                  *, read_ref: str | None = None, offset: int = 0) -> str:
@@ -254,7 +205,15 @@ class Checks:
         if read_ref:
             if question is not None or refs is not None:
                 raise HarnessError('Read saved evidence or submit a question, not both.')
-            return self.harness.build_evidence_groups(task_id, read_ref=read_ref, offset=offset)
+            # Review pages and implementation evidence share one public reader.
+            owner = f"review:{check['session_id']}"
+            try:
+                root = self.harness.pages.resolve(owner, read_ref.split('#', 1)[0])
+            except HarnessError:
+                return self.harness.build_evidence_groups(task_id, read_ref=read_ref, offset=offset)
+            if root.get('check_id') != check_id:
+                raise HarnessError('Review reference belongs to a different checkpoint.')
+            return self.harness.pages.read(owner, read_ref, offset)
         if offset or not question or not question.strip():
             raise HarnessError('Provide a question (refs optional), or read_ref for continuation.')
         sources = check['sources'] + [
@@ -263,8 +222,11 @@ class Checks:
         if refs is None:
             # The checkpoint already fixes the original context. A precise question
             # should not fail simply because the caller did not copy an anchor.
+            calls = {e.get('call_id') for e in check['events'] if e['id'] in check['anchors']}
+            trace_ids = {e['id'] for e in check['events'] if e['kind'] == 'tool_call'
+                         and (e['turn_id'] == check['turn_id'] or e.get('call_id') in calls)}
             refs = [{'source_id': s['id'], 'quote': s['content'], 'start': 0}
-                    for s in sources if (s['kind'] == 'user' or s['id'] in check['selected_plans'])
+                    for s in sources if (s['kind'] == 'user' or s['id'] in check['selected_plans'] or s['id'] in trace_ids)
                     and s['content'].strip()]
         known = {s['id'] for s in sources}
         for ref in refs:
@@ -299,7 +261,7 @@ class Checks:
                     'baseline_uncollected_files': check['baseline_uncollected_files']}
             self.store.put_task(task, new=True)
         else:
-            # Initial context built this task before the model could cite its code.
+            # Earlier queries may have introduced code references.
             # Keep new evidence anchors available to subsequent normalization.
             existing = {s['id'] for s in task['sources']}
             additions = [s for s in sources if s['id'] not in existing]

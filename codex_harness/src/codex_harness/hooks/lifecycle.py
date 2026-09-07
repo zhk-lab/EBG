@@ -44,7 +44,23 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
         if name == 'PostToolUse':
             log.append(session, turn['turn_id'], {**event, 'kind': 'tool_result',
                        'content': _content(payload['tool_response'])}, f'result:{original_id}')
-            if _failed(payload['tool_response']):
+            # Completed verification needs a result check even when it failed.
+            # Failure alone does not establish an intention to change the plan.
+            if _verification_command(payload['tool_input']):
+                if any(c.get('verification_call_id') == call_id for c in harness.checks.all()):
+                    return {}
+                recorded = [e for e in log.events(session) if e.get('call_id') == call_id]
+                check = harness.checks.create('result', '验证命令已返回，核对实际执行、验证内容及结果分析。',
+                                              event_ids=[e['id'] for e in recorded])
+                check['verification_call_id'] = call_id
+                harness.checks.put(check)
+                return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
+                    f"BEG 检查点 {check['id']}：采用或汇报结果前，调用 beg_review(check_id=\"{check['id']}\")。"
+                    '成功、失败或部分完成都需检查；核对实际执行、验证是否检验目标效果，以及比较和归因是否成立。'
+                    '内部试验不必逐次披露；本轮汇报时说明实际完成情况及仍影响结论的重要限制。'
+                    '若准备实质改变原要求，先用 adjustment/ambiguity 检查并按影响提前披露。'
+                    '此检查点包含刚返回的验证，不要用执行前的旧检查点代替。'}}
+            elif _failed(payload['tool_response']):
                 if any(c.get('failure_call_id') == call_id for c in harness.checks.all()):
                     return {}  # Replayed delivery of the same failure, even after later events.
                 recorded = [e for e in log.events(session) if e.get('call_id') == call_id]
@@ -55,20 +71,10 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
                     check['failure_call_id'] = call_id
                     harness.checks.put(check)
                     return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                        f"BEG 检查点 {check['id']}：调用 beg_context(check_id=\"{check['id']}\")。"
-                        '失败信号不等于任务问题；先判断影响，必要时查代码并披露。'}}
-            elif _verification_command(payload['tool_input']):
-                if any(c.get('verification_call_id') == call_id for c in harness.checks.all()):
-                    return {}
-                recorded = [e for e in log.events(session) if e.get('call_id') == call_id]
-                check = harness.checks.create('result', '验证命令已返回，核对实际验证范围与完成声明。',
-                                              event_ids=[e['id'] for e in recorded])
-                check['verification_call_id'] = call_id
-                harness.checks.put(check)
-                return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                    f"BEG 检查点 {check['id']}：在声称验证通过或完成前，调用 beg_context(check_id=\"{check['id']}\")。"
-                    '对照原始成功条件、实际执行路径与详细结果；命令返回不等于要求满足。'
-                    '此检查点包含刚返回的验证，不要用执行前的旧检查点代替。'}}
+                        f"BEG 检查点 {check['id']}：调用 beg_review(check_id=\"{check['id']}\")。"
+                        '失败信号不等于任务问题，也不代表必须向用户披露。'
+                        '核对原要求、阻碍、拟采取的做法及影响；准备重要方案变更时在落实前披露，'
+                        '已有授权内的普通修复可以继续，仍有重要限制则在本轮汇报时说明。'}}
     elif name == 'Stop':
         # Stop continuation is a new prompt in Codex. Never request an endless
         # chain of reviews, and never close the turn before freezing its check.
@@ -82,9 +88,10 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
                           if c['turn_id'] == turn['turn_id'] and c.get('stop_reason')), None)
         reason = None
         if check and not check['assessment']:
-            reason = (f"BEG 检查点 {check['id']}：结束前调用 beg_context(check_id=\"{check['id']}\")，"
-                      '核对准备汇报的结果；需要代码时调用 beg_evidence。'
-                      '有影响结论的问题才主动披露；核对后用 beg_context 记录 conclusion 和 summary，再完成汇报。'
+            reason = (f"BEG 检查点 {check['id']}：结束前调用 beg_review(check_id=\"{check['id']}\")，"
+                      '核对实际执行、验证内容和结果分析，失败或部分完成也要据实汇报；发现疑点即使尚不确定，也必须调用 beg_evidence 核实。'
+                      '将实际完成情况及仍影响结论的重要限制随结果说明，不逐次重复内部失败。'
+                      '核对后用 beg_record 记录 conclusion 和 summary，再完成汇报。'
                       '这是系统续跑提示，不是新的用户任务要求。')
             if check.get('stop_reason') != reason:
                 check['stop_reason'] = reason
@@ -131,9 +138,9 @@ def _context(event_name: str, session_id: str, harness: Harness) -> dict[str, An
     reminder = (' 尚未记录结论的检查点（最近三个）：' + '、'.join(pending[-3:])) if pending else ''
     return {'hookSpecificOutput': {
         'hookEventName': event_name,
-        'additionalContext': f'BEG 正在记录 session_id={session_id}。采用结果或汇报前、重要方案调整或关键歧义时，'
-                             '使用 beg_context(trigger=result/adjustment/ambiguity, focus=拟作出的声明或决定)；'
-                             '收到检查点编号则直接读取。需要核实代码时调用 beg_evidence；核对后记录 conclusion/summary。'
-                             '只披露影响结论或决策的问题，不重复提醒。执行普通任务使用上述两个接口；'
-                             '只有用户另行要求完整审查时才使用 Skill 中的完整任务核对流程。' + reminder,
+        'additionalContext': f'BEG 正在记录 session_id={session_id}。采用或汇报结果前检查；'
+                             '主要在本轮汇报时披露仍影响结论的重要问题，关键歧义或重要方案变更在落实前提前披露。'
+                             '使用 beg_review(trigger=result/adjustment/ambiguity, focus=拟作出的声明或决定)；'
+                             '收到检查点编号则直接读取。发现疑点必须调用 beg_evidence，即使尚不确定；核对后用 beg_record 保存 conclusion/summary。'
+                             '只披露影响结论或决策的问题，不重复提醒。审查统一使用上述三个接口。' + reminder,
     }}

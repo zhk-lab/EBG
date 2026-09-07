@@ -23,7 +23,7 @@ from beg.core.errors import DirectoryError
 from beg.evidence_intake import build_evidence, load_visible_bundle
 from beg.graph_assembly import build_graph
 from beg.relation_linking import build_edges
-from scripts.directory_pipeline import (
+from scripts.main.prepare import (
     build_directory_artifact,
     validate_directory_artifact,
 )

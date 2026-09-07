@@ -31,14 +31,20 @@ class CheckTests(unittest.TestCase):
         return handle_hook(self.harness, {'session_id': 's', 'turn_id': 't1', 'cwd': str(self.repo),
                                           'hook_event_name': name, **args})
 
-    def context(self, **args):
-        return yaml.safe_load(self.harness.checks.context(**args))
+    def review(self, **args):
+        return yaml.safe_load(self.harness.checks.review(**args))
+
+    def evidence(self, **args):
+        return yaml.safe_load(self.harness.checks.evidence(**args))
+
+    def record(self, **args):
+        return yaml.safe_load(self.harness.checks.record(**args))
 
     def test_inflight_freezes_code_plans_and_trace_and_survives_restart(self):
         self.code.write_text('def train():\n    return 300\n', encoding='utf-8')
         self.hook('PostToolUse', tool_name='Bash', tool_use_id='run',
                   tool_input={'command': 'python train.py'}, tool_response={'exit_code': 0, 'accuracy': .91})
-        ctx = self.context(trigger='result', focus='Adopt accuracy .91')
+        ctx = self.review(trigger='result', focus='Adopt accuracy .91')
         self.assertEqual(ctx['plans'][0]['content'], 'Keep training budget fixed at 30.')
         self.assertEqual({e['kind'] for e in ctx['trace']}, {'tool_call', 'tool_result'})
         self.assertEqual(ctx['prompts'][0]['id'], 'P1')
@@ -56,9 +62,10 @@ class CheckTests(unittest.TestCase):
         self.assertIn('trace', evidence['evidence_groups']['R1']['cited_sources'])
         self.assertIn('return 300', str(evidence))
         self.assertNotIn('return 999', str(evidence))
+        self.harness.checks.evidence(ctx['check_id'], 'What does train.py return?')
         view = self.harness.store.latest_view('check_' + ctx['check_id'])
         self.assertNotIn('LATER', str(view['events']))
-        reread = self.context(check_id=ctx['check_id'], read_ref=ctx['read_ref'])
+        reread = self.evidence(check_id=ctx['check_id'], read_ref=ctx['read_ref'])
         self.assertEqual(ctx, reread)
 
     def test_older_constraints_and_linked_call_are_available(self):
@@ -69,54 +76,52 @@ class CheckTests(unittest.TestCase):
         self.hook('UserPromptSubmit', turn_id='t2', prompt='Try another candidate.')
         self.hook('PostToolUse', turn_id='t2', tool_name='Read', tool_use_id='new',
                   tool_input={'path': 'notes.txt'}, tool_response='unrelated')
-        ctx = self.context(trigger='result', focus='Use old result', event_ids=[old])
+        ctx = self.review(trigger='result', focus='Use old result', event_ids=[old])
         self.assertEqual(len(ctx['prompts']), 2)
         self.assertEqual(len(ctx['trace']), 2)
         self.assertNotIn('unrelated', str(ctx['trace']))
-        expanded = self.context(check_id=ctx['check_id'], read_ref=ctx['all_trace']['read_ref'])
+        expanded = self.evidence(check_id=ctx['check_id'], read_ref=ctx['all_trace']['read_ref'])
         self.assertIn('unrelated', str(expanded))
 
     def test_assessment_not_inferred_from_read_and_invalidated_by_changes(self):
-        ctx = self.context(trigger='result', focus='Adopt result')
+        ctx = self.review(trigger='result', focus='Adopt result')
         self.assertIsNone(ctx['assessment'])
-        done = self.context(check_id=ctx['check_id'], conclusion='issue', summary='Budget changed; disclose before adopting.')
-        reused = self.context(trigger='result', focus='Adopt result')
+        done = self.record(check_id=ctx['check_id'], conclusion='issue', summary='Budget changed; disclose before adopting.')
+        reused = self.review(trigger='result', focus='Adopt result')
         self.assertEqual(done['check_id'], reused['check_id'])
-        self.assertEqual(done['assessment'], reused['assessment'])
-        changed_claim = self.context(trigger='result', focus='All models improve')
+        self.assertEqual(done['conclusion'], reused['assessment']['conclusion'])
+        changed_claim = self.review(trigger='result', focus='All models improve')
         self.assertNotEqual(ctx['check_id'], changed_claim['check_id'])
         self.code.write_text('def train():\n    return 400\n', encoding='utf-8')
-        changed_code = self.context(trigger='result', focus='Adopt result')
+        changed_code = self.review(trigger='result', focus='Adopt result')
         self.assertIsNone(changed_code['assessment'])
         self.assertNotEqual(ctx['check_id'], changed_code['check_id'])
 
-    def test_first_context_includes_code_and_reuses_its_frozen_evidence(self):
-        ctx = self.context(trigger='result', focus='Deliver train.py with fixed budget.')
-        self.assertIn('return 30', str(ctx['code_evidence']))
-        self.assertIn('read_ref', ctx['evidence_expansion'])
+    def test_review_reread_does_not_recollect_or_query_code(self):
+        ctx = self.review(trigger='result', focus='Deliver train.py with fixed budget.')
+        self.assertNotIn('code_evidence', ctx)
         self.code.write_text('def train():\n    return 900\n', encoding='utf-8')
-        with patch.object(self.harness, 'build_evidence_groups', side_effect=AssertionError('rebuilt')):
+        with patch.object(self.harness, 'build_evidence_groups', side_effect=AssertionError('eager evidence')):
             with patch('codex_harness.application.checks.capture', side_effect=AssertionError('recaptured')):
-                reread = self.context(check_id=ctx['check_id'])
-        self.assertEqual(ctx['code_evidence'], reread['code_evidence'])
-        self.assertNotIn('return 900', str(reread['code_evidence']))
+                reread = self.review(check_id=ctx['check_id'])
+        self.assertEqual(ctx, reread)
 
     def test_stop_continuation_is_bounded_and_not_a_user_requirement(self):
         stop = self.hook('Stop', last_assistant_message='Accuracy improved.')
         self.assertEqual(stop['decision'], 'block')
         check = self.harness.checks.all()[-1]
-        self.context(check_id=check['id'])
+        self.review(check_id=check['id'])
         self.assertIsNone(self.harness.checks.get(check['id'])['assessment'])
         self.hook('UserPromptSubmit', turn_id='resume', prompt=stop['reason'])
-        self.context(check_id=check['id'], conclusion='uncertain', summary='Need a comparable run.')
-        ctx = self.context(trigger='result', focus='Report the limitation')
+        self.record(check_id=check['id'], conclusion='uncertain', summary='Need a comparable run.')
+        ctx = self.review(trigger='result', focus='Report the limitation')
         self.assertEqual(len(ctx['prompts']), 1)
         end = self.hook('Stop', turn_id='resume', stop_hook_active=True,
                         last_assistant_message='Comparable validation is missing.')
         self.assertNotIn('decision', end)
 
     def test_question_without_refs_uses_checkpoint_sources(self):
-        ctx = self.context(trigger='result', focus='Deliver training result')
+        ctx = self.review(trigger='result', focus='Deliver training result')
         result = yaml.safe_load(self.harness.checks.evidence(
             ctx['check_id'], 'What budget does train.py actually use?'))
         self.assertIn('return 30', str(result))
@@ -126,11 +131,11 @@ class CheckTests(unittest.TestCase):
         expected = {'source': 'review fixture', 'content': 'Check the evidence for the proposed conclusion.',
                     'note': 'Review guidance, not a user requirement.'}
         with patch('codex_harness.application.checks._review_protocol', return_value=expected):
-            ctx = self.context(trigger='result', focus='Report improvement')
+            ctx = self.review(trigger='result', focus='Report improvement')
         protocol = ctx['review_protocol']
         self.assertEqual(protocol, expected)
         with patch('codex_harness.application.checks._review_protocol', side_effect=AssertionError('reread Skill')):
-            repeated = self.context(check_id=ctx['check_id'])
+            repeated = self.review(check_id=ctx['check_id'])
         self.assertEqual(protocol, repeated['review_protocol'])
 
     def test_review_guidance_does_not_add_a_requirement_or_verdict(self):
@@ -138,14 +143,15 @@ class CheckTests(unittest.TestCase):
         (self.repo / 'PLAN.md').write_text(plan, encoding='utf-8')
         for trigger in ('ambiguity', 'result'):
             with self.subTest(trigger=trigger):
-                ctx = self.context(trigger=trigger, focus='Choose a search strategy for PLAN.md')
+                ctx = self.review(trigger=trigger, focus='Choose a search strategy for PLAN.md')
                 self.assertTrue(ctx['review_protocol']['content'])
                 self.assertEqual({item['content'] for item in ctx['plans']},
                                  {'Keep training budget fixed at 30.', plan})
                 self.assertIsNone(ctx['assessment'])
 
     def test_repo_quote_can_anchor_followup_without_becoming_a_plan(self):
-        ctx = self.context(trigger='result', focus='Deliver training result')
+        ctx = self.review(trigger='result', focus='Deliver training result')
+        self.harness.checks.evidence(ctx['check_id'], 'What does train.py return?')
         view = self.harness.store.latest_view('check_' + ctx['check_id'])
         self.code.write_text('def train():\n    return 900\n', encoding='utf-8')
         ref = {'source_id': view['view_id'] + ':repo:train.py', 'quote': 'return 30'}
@@ -157,30 +163,28 @@ class CheckTests(unittest.TestCase):
         self.assertNotIn('return 900', str(result))
         # A later question must still accept the original returned reference.
         self.harness.checks.evidence(ctx['check_id'], 'Is train.py using 30?', [ref])
-        other = self.context(trigger='result', focus='A different result')
+        other = self.review(trigger='result', focus='A different result')
         with self.assertRaisesRegex(HarnessError, 'different checkpoint'):
             self.harness.checks.evidence(other['check_id'], 'Check budget', [ref])
 
-    def test_large_data_does_not_fold_small_default_code_into_a_link(self):
+    def test_large_data_is_only_returned_by_explicit_evidence_query(self):
         (self.repo / 'samples.csv').write_text('id,value\n' + 'sample,30\n' * 2000, encoding='utf-8')
         (self.repo / 'PLAN.md').write_text('Use samples.csv in train.py. Keep budget 30.', encoding='utf-8')
-        self.harness.token_budget = 3000
-        ctx = self.context(trigger='result', focus='Deliver train.py result')
-        if 'entries' in ctx:
-            code = next(e for e in ctx['entries'] if e['key'] == 'code_evidence')['content']
-        else:
-            code = ctx['code_evidence']
+        ctx = self.review(trigger='result', focus='Deliver train.py result')
+        self.assertNotIn('sample,30', str(ctx))
+        self.assertNotIn('return 30', str(ctx))
+        proof = self.evidence(check_id=ctx['check_id'], question='How does train.py use samples.csv?')
+        self.assertIn('samples.csv', str(proof['linked_artifacts']))
+        view = self.harness.store.latest_view('check_' + ctx['check_id'])
+        code = self.evidence(check_id=ctx['check_id'], read_ref=view['view_id'] + ':repo:train.py')
         self.assertIn('return 30', str(code))
-        self.assertNotIn('sample,30', str(code))
-        check = self.harness.checks.all()[-1]
-        self.assertIn('samples.csv', str(check['initial_evidence']['materials']))
 
     def test_failure_signal_keeps_result_and_beg_calls_do_not_recurse(self):
         result = self.hook('PostToolUse', tool_name='Bash', tool_use_id='fail',
                            tool_input={'command': 'python train.py'}, tool_response={'exit_code': 1})
         self.assertNotIn('decision', result)
-        self.assertIn('beg_context', result['hookSpecificOutput']['additionalContext'])
-        ctx = self.context(check_id=self.harness.checks.all()[-1]['id'])
+        self.assertIn('beg_review', result['hookSpecificOutput']['additionalContext'])
+        ctx = self.review(check_id=self.harness.checks.all()[-1]['id'])
         self.assertIn('"exit_code": 1', str(ctx['trace']))
         count = len(self.harness.sessions.events('s'))
         self.hook('PostToolUse', tool_name='mcp__beg_disclose__beg_evidence', tool_use_id='self',
@@ -195,13 +199,13 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(checkpoints, len(self.harness.checks.all()))
 
     def test_adoption_assessment_can_cover_identical_final_report(self):
-        ctx = self.context(trigger='result', focus='The measured result is ready.')
-        self.context(check_id=ctx['check_id'], conclusion='clear', summary='The result matches the recorded conditions.')
+        ctx = self.review(trigger='result', focus='The measured result is ready.')
+        self.record(check_id=ctx['check_id'], conclusion='clear', summary='The result matches the recorded conditions.')
         self.assertEqual(self.hook('Stop', last_assistant_message='The measured result is ready.'), {})
         self.assertEqual(len(self.harness.checks.all()), 1)
 
     def test_unread_material_and_old_evidence_pages_remain_frozen(self):
-        ctx = self.context(trigger='result', focus='Verify train.py')
+        ctx = self.review(trigger='result', focus='Verify train.py')
         refs = [{'source_id': 'P1', 'quote': 'Follow PLAN.md and improve train.py.'}]
         first = yaml.safe_load(self.harness.checks.evidence(ctx['check_id'], 'What does train.py return?', refs))
         self.harness.checks.evidence(ctx['check_id'], 'Does train.py define an optimizer?', refs)
@@ -213,26 +217,26 @@ class CheckTests(unittest.TestCase):
         self.assertIn('read_ref', paged)
 
     def test_ambiguity_returns_plan_without_inventing_a_requirement(self):
-        ctx = self.context(trigger='ambiguity', focus='PLAN.md does not specify a seed; use 42?')
+        ctx = self.review(trigger='ambiguity', focus='PLAN.md does not specify a seed; use 42?')
         self.assertEqual(ctx['trigger'], 'ambiguity')
         self.assertNotIn('42', str(ctx['prompts']) + str(ctx['plans']))
         self.assertIsNone(ctx['assessment'])
 
     def test_invalid_refs_and_cross_checkpoint_reads_are_rejected(self):
-        ctx = self.context(trigger='adjustment', focus='Switch the optimizer')
-        other = self.context(trigger='result', focus='Report improvement')
+        ctx = self.review(trigger='adjustment', focus='Switch the optimizer')
+        other = self.review(trigger='result', focus='Report improvement')
         with self.assertRaises(HarnessError):
-            self.context(check_id=other['check_id'], read_ref=ctx['read_ref'])
+            self.evidence(check_id=other['check_id'], read_ref=ctx['read_ref'])
         with self.assertRaises(HarnessError):
             self.harness.checks.evidence(ctx['check_id'], 'Did training change?',
                                          [{'source_id': 'P1', 'quote': 'Invented requirement'}])
         with self.assertRaises(HarnessError):
-            self.context(trigger='result', focus='adopt', event_ids=['s99999'])
+            self.review(trigger='result', focus='adopt', event_ids=['s99999'])
 
     def test_capture_failure_and_event_race_leave_no_partial_checkpoint(self):
         with patch('codex_harness.application.checks.capture', side_effect=OSError('interrupted')):
             with self.assertRaises(OSError):
-                self.context(trigger='result', focus='adopt')
+                self.review(trigger='result', focus='adopt')
         self.assertEqual(self.harness.checks.all(), [])
         def racing(*args, **kwargs):
             result = capture(*args, **kwargs)
@@ -240,23 +244,23 @@ class CheckTests(unittest.TestCase):
             return result
         with patch('codex_harness.application.checks.capture', side_effect=racing):
             with self.assertRaisesRegex(HarnessError, 'Events changed'):
-                self.context(trigger='result', focus='adopt')
+                self.review(trigger='result', focus='adopt')
         self.assertEqual(self.harness.checks.all(), [])
         self.harness = Harness(self.root / 'state')
-        self.assertIn('check_id', self.context(trigger='result', focus='adopt'))
+        self.assertIn('check_id', self.review(trigger='result', focus='adopt'))
 
     def test_session_switch_clears_checks_and_references(self):
-        ctx = self.context(trigger='result', focus='adopt')
+        ctx = self.review(trigger='result', focus='adopt')
         self.hook('UserPromptSubmit', session_id='new', prompt='New task')
         with self.assertRaises(HarnessError):
-            self.context(check_id=ctx['check_id'])
+            self.review(check_id=ctx['check_id'])
         self.assertEqual(self.harness.checks.all(), [])
 
     def test_small_budget_can_expand_frozen_context(self):
         self.harness.token_budget = 256
-        result = self.context(trigger='result', focus='adopt')
+        result = self.review(trigger='result', focus='adopt')
         check = self.harness.checks.all()[-1]
         self.assertIn('entries', result)
         self.assertEqual(result['entries'][0]['content'], check['id'])
-        sources = self.context(check_id=check['id'], read_ref=result['read_ref'] + '#/prompts')
+        sources = self.evidence(check_id=check['id'], read_ref=result['read_ref'] + '#/prompts')
         self.assertIn('Follow PLAN.md', str(sources))

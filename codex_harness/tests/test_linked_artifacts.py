@@ -6,6 +6,7 @@ import yaml
 
 from codex_harness import Harness
 from codex_harness.application.artifacts import linked_artifacts
+from codex_harness.application.render import tokens
 from codex_harness.hooks.lifecycle import handle_hook
 from tests.support import ProjectTemporaryDirectory
 
@@ -23,7 +24,7 @@ class LinkedArtifactsTests(unittest.TestCase):
             harness = Harness(root / 'state')
             handle_hook(harness, {'hook_event_name': 'UserPromptSubmit', 'session_id': 's',
                                  'turn_id': 't', 'cwd': str(repo), 'prompt': 'Follow PLAN.md.'})
-            context = yaml.safe_load(harness.checks.context(trigger='result', focus='Adopt model.'))
+            context = yaml.safe_load(harness.checks.review(trigger='result', focus='Adopt model.'))
             # The later disk state must not replace the checkpoint evidence.
             (repo / 'inputs/lineage/map.csv').write_text('item,origin\na,changed\n')
             result = yaml.safe_load(harness.checks.evidence(context['check_id'], 'What does train.py do?',
@@ -57,6 +58,35 @@ class LinkedArtifactsTests(unittest.TestCase):
         self.assertEqual({x['path'] for x in result['items']}, {'a/x.json', 'b/y.json'})
         self.assertEqual(result['ambiguous_references'][0]['candidates'], ['a/x.json', 'b/x.json'])
         self.assertFalse(result['limited'])
+
+    def test_paged_evidence_keeps_table_relations_visible_and_readable(self):
+        with ProjectTemporaryDirectory() as root:
+            repo = root / 'repo'
+            repo.mkdir()
+            (repo / 'PLAN.md').write_text('Inspect train.py and batch.csv, jobs.csv, catalog.csv.')
+            (repo / 'train.py').write_text('"""' + 'implementation detail\n' * 5000 + '"""\n')
+            (repo / 'batch.csv').write_text('sample_id,job_key\na,j1\nb,j2\nc,j3\n')
+            (repo / 'jobs.csv').write_text('job_key,source_key\nj1,p1\nj2,p2\nj3,p3\n')
+            (repo / 'catalog.csv').write_text('id,partition\np1,internal\np2,internal\np3,external\n')
+            harness = Harness(root / 'state', token_budget=6000)
+            handle_hook(harness, {'hook_event_name': 'UserPromptSubmit', 'session_id': 's',
+                                 'turn_id': 't', 'cwd': str(repo), 'prompt': 'Follow PLAN.md.'})
+            review = yaml.safe_load(harness.checks.review(trigger='result', focus='Report input provenance.'))
+            evidence = yaml.safe_load(harness.checks.evidence(review['check_id'], 'Where did the inputs originate?'))
+            relations = evidence['linked_artifacts']['table_relations']
+            group = next(x for x in relations['groups'] if x['from'] == 'batch.csv')
+            self.assertEqual({x['value']: x['rows'] for x in group['counts']},
+                             {'internal': 2, 'external': 1})
+            self.assertIn('不是已声明的外键', relations['note'])
+            full = yaml.safe_load(harness.checks.evidence(review['check_id'], read_ref=relations['read_ref']))
+            self.assertEqual(full['groups'], relations['groups'])
+            harness.token_budget = 1200
+            output = harness.checks.evidence(review['check_id'], read_ref=evidence['read_ref'])
+            self.assertLessEqual(tokens(output), harness.token_budget)
+            small = yaml.safe_load(output)
+            navigation = small['linked_artifacts']['table_relations']
+            self.assertEqual(navigation['read_ref'], relations['read_ref'])
+            self.assertEqual(navigation['group_count'], len(relations['groups']))
 
     def test_large_material_is_explicitly_partial_and_expansion_is_bounded(self):
         class Files:

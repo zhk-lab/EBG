@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from scripts.batch_prediction import (
+from scripts.main.predict import (
     BatchConfig,
     BatchExperimentError,
     collect_response_usage,
@@ -52,14 +52,14 @@ class BatchPredictionTests(unittest.TestCase):
                 (config.output_root / "manifest.json").read_text(encoding="utf-8")
             )
 
-            self.assertEqual(manifest["schema_version"], 3)
+            self.assertEqual(manifest["schema_version"], 4)
             self.assertEqual(
                 manifest["prompt_variants"],
                 {"raw": "baseline", "graph": "BEG"},
             )
             self.assertEqual(
                 manifest["prediction_requests"]["specgap"],
-                {"thinking": "omitted", "reasoning_effort": "none"},
+                {"reasoning_effort": "none"},
             )
 
             changed = BatchConfig(
@@ -183,6 +183,7 @@ class BatchPredictionTests(unittest.TestCase):
             "base_url": "https://example.test/v1",
             "workers": 1,
             "schema_root": PROJECT_ROOT / "schemas",
+            "request_options": {"reasoning_effort": "none"},
         }
 
     @classmethod

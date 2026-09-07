@@ -1,4 +1,4 @@
-"""Resumable GLM judging for frozen BEG prediction experiments."""
+"""Judge saved main experiment predictions and summarize results."""
 
 from __future__ import annotations
 
@@ -15,20 +15,40 @@ from types import ModuleType
 from typing import Any
 from urllib.parse import urlsplit
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
 from agentloop.errors import RetryableModelError
-from agentloop.provider import ModelClient, ModelCompletion, OpenAICompatibleJsonClient
-from scripts.agentloop_cli import PROJECT_ROOT
-from scripts.batch_prediction import ARMS, BENCHMARKS, PHASES, load_split
+from agentloop.provider import (
+    ModelClient,
+    ModelCompletion,
+    OpenAICompatibleJsonClient,
+)
+from scripts.main.predict import ARMS, BENCHMARKS, PHASES, load_split
+from scripts.model_config import (
+    add_model_arguments,
+    apply_model_settings,
+    public_settings,
+)
 
+JUDGE_MANIFEST_VERSION = 4
 
-JUDGE_MANIFEST_VERSION = 3
 SCORER_VERSION = 2
+
 JUDGE_PROFILE = "official-desktop-v1"
+
 DEFAULT_JUDGE_MODEL = "glm-5-2"
+
 DEFAULT_JUDGE_BASE_URL = "http://127.0.0.1:28080/v1"
+
 DEFAULT_MAX_OUTPUT_TOKENS = 32_768
+
 DEFAULT_NETWORK_RETRIES = 2
+
 DEFAULT_FORMAT_REPAIRS = 1
+
 METRIC_NAMES = {
     "specgap": (
         "gold_precision",
@@ -84,6 +104,7 @@ class JudgeBatchConfig:
     format_repairs: int = DEFAULT_FORMAT_REPAIRS
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     artifact_root: Path = PROJECT_ROOT / "evaluation"
+    request_options: dict[str, Any] | None = None
 
     @property
     def output_root(self) -> Path:
@@ -172,7 +193,7 @@ def run_batch_judges(
         "phase": config.phase,
         "judge_model": config.judge_model,
         "judge_profile": JUDGE_PROFILE,
-        "thinking": "disabled",
+        "request_options": config.request_options or {},
         "samples": results,
         "totals": _aggregate_totals(results),
         "groups": _aggregate_groups(results),
@@ -787,6 +808,20 @@ def _load_prediction_manifest(config: JudgeBatchConfig) -> dict[str, Any]:
         raise BatchJudgeError("prediction manifest phase differs")
     if value.get("prepare_only") is True:
         raise BatchJudgeError("cannot judge a prepare-only prediction experiment")
+    if config.phase == "full":
+        selected = value.get("selected_ids")
+        if not isinstance(selected, dict):
+            raise BatchJudgeError("prediction manifest lacks selected_ids")
+        for benchmark in config.benchmarks:
+            ids = selected.get(benchmark)
+            if (
+                not isinstance(ids, list) or not ids
+                or any(not isinstance(item, str) or not item for item in ids)
+            ):
+                raise BatchJudgeError(f"prediction manifest lacks samples for {benchmark}")
+            if len(ids) != len(set(ids)):
+                raise BatchJudgeError(f"duplicate prediction samples for {benchmark}")
+        return value
     split_file = value.get("split_file")
     if not isinstance(split_file, str):
         raise BatchJudgeError("prediction manifest lacks split_file")
@@ -836,8 +871,8 @@ def _build_manifest(
         "judge_model": config.judge_model,
         "judge_profile": JUDGE_PROFILE,
         "base_url": config.base_url.rstrip("/"),
-        "temperature": "provider_default",
-        "thinking": "disabled",
+        "request_options": config.request_options or {},
+        "model_profile": _expected_model_profile(config),
         "json_mode": True,
         "tools": False,
         "api_key_env": config.api_key_env,
@@ -948,35 +983,25 @@ def _default_client_factory(config: JudgeBatchConfig) -> Callable[[], ModelClien
         raise BatchJudgeError(f"environment variable {config.api_key_env} is required")
 
     def create() -> ModelClient:
-        thinking_parameter = (
-            "enable_thinking"
-            if config.judge_model.casefold().startswith("qwen")
-            else "thinking"
-        )
         return OpenAICompatibleJsonClient(
             base_url=config.base_url,
             api_key=api_key,
             model=config.judge_model,
             timeout=config.timeout,
-            disable_thinking=True,
-            thinking_parameter=thinking_parameter,
-            temperature=None,
+            request_options=config.request_options or {},
         )
 
     return create
 
 
 def _expected_model_profile(config: JudgeBatchConfig) -> dict[str, Any]:
-    return {
-        "provider": "openai_compatible_json",
-        "base_url": config.base_url.rstrip("/"),
-        "model": config.judge_model,
-        "timeout": config.timeout,
-        "temperature": "provider_default",
-        "response_protocol": "json_object_v1",
-        "thinking": "disabled",
-        "reasoning_effort": "omitted",
-    }
+    return OpenAICompatibleJsonClient(
+        base_url=config.base_url,
+        api_key="profile-only",
+        model=config.judge_model,
+        timeout=config.timeout,
+        request_options=config.request_options or {},
+    ).profile
 
 
 def _validate_client_profile(client: ModelClient, config: JudgeBatchConfig) -> None:
@@ -1057,6 +1082,17 @@ def _print_event(value: dict[str, Any]) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    try:
+        settings = apply_model_settings(args, judge=True)
+    except (OSError, ValueError) as error:
+        print(json.dumps({"status": "failed", "failure": str(error)}, ensure_ascii=False))
+        return 1
+    if args.show_config:
+        print(json.dumps(public_settings(settings), ensure_ascii=False, indent=2))
+        return 0
+    if not args.experiment_name:
+        print("--experiment-name is required unless --show-config is used")
+        return 1
     config = JudgeBatchConfig(
         experiment_name=args.experiment_name,
         experiment_root=args.experiment_root,
@@ -1072,6 +1108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         format_repairs=args.format_repairs,
         max_output_tokens=args.max_output_tokens,
         artifact_root=args.artifact_root,
+        request_options=args.request_options,
     )
     try:
         summary = run_batch_judges(config)
@@ -1083,18 +1120,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--experiment-name", required=True)
+    parser.add_argument("--experiment-name")
     parser.add_argument(
         "--experiment-root",
         type=Path,
         default=PROJECT_ROOT / "evaluation" / "experiments",
     )
-    parser.add_argument("--phase", required=True, choices=PHASES)
+    parser.add_argument("--phase", default="full", choices=PHASES)
     parser.add_argument("--benchmark", action="append", choices=BENCHMARKS)
     parser.add_argument("--arm", action="append", choices=ARMS)
-    parser.add_argument("--base-url", default=DEFAULT_JUDGE_BASE_URL)
-    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
-    parser.add_argument("--api-key-env", default="GLM_API_KEY")
+    add_model_arguments(parser, judge=True)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument(

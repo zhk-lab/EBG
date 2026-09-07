@@ -22,33 +22,6 @@ from evaluation_core.messages import (
 
 
 RepoBenchmark = Literal["specgap", "silentswap"]
-ReasoningEffort = Literal["none", "light", "medium", "high"]
-
-
-@dataclass(frozen=True, slots=True)
-class PredictionRequestConfig:
-    """Exact provider fields frozen for one benchmark's prediction model."""
-
-    thinking: Literal["disabled"] | None
-    reasoning_effort: ReasoningEffort | None
-
-    def __post_init__(self) -> None:
-        if self.thinking not in {None, "disabled"}:
-            raise AgentLoopError("prediction thinking must be disabled or omitted")
-        if self.reasoning_effort not in {None, "none", "light", "medium", "high"}:
-            raise AgentLoopError("unsupported prediction reasoning_effort")
-
-    def public_dict(self) -> dict[str, Any]:
-        return {
-            "thinking": self.thinking if self.thinking is not None else "omitted",
-            "reasoning_effort": (
-                self.reasoning_effort
-                if self.reasoning_effort is not None
-                else "omitted"
-            ),
-        }
-
-
 @dataclass(frozen=True, slots=True)
 class BoundModule7:
     """Schema-bound values injected into one shared AgentLoop run."""
@@ -70,7 +43,6 @@ class RepoBenchmarkConfig:
     required_directory_sections: tuple[str, ...]
     prediction_schema_filename: str
     grounding_profile: str
-    prediction_request: PredictionRequestConfig
 
     def __post_init__(self) -> None:
         if self.benchmark not in {"specgap", "silentswap"}:
@@ -95,10 +67,6 @@ class RepoBenchmarkConfig:
         for name, value in text_fields.items():
             if not isinstance(value, str) or not value.strip():
                 raise AgentLoopError(f"benchmark {name} must be non-empty")
-        if not isinstance(self.prediction_request, PredictionRequestConfig):
-            raise AgentLoopError(
-                "benchmark prediction_request must be PredictionRequestConfig"
-            )
         if (
             not self.required_directory_sections
             or len(self.required_directory_sections)
@@ -189,7 +157,6 @@ class RepoBenchmarkConfig:
             },
             "prediction_schema_filename": self.prediction_schema_filename,
             "grounding_profile": self.grounding_profile,
-            "prediction_request": self.prediction_request.public_dict(),
         }
 
 

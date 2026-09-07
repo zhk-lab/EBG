@@ -30,6 +30,21 @@ from tests.support import ProjectTemporaryDirectory
 
 
 class PromptAssetTests(unittest.TestCase):
+    def test_repo_pair_shares_proof_rules_and_output_contract(self) -> None:
+        for benchmark in ("specgap", "silentswap"):
+            raw = load_task_prompt("baseline", benchmark)
+            graph = load_task_prompt("BEG", benchmark)
+            marker = "For each candidate"
+            raw_rules = raw.split(marker, 1)[1].replace("`R0001`", "`F0001`")
+            graph_rules = graph.split(marker, 1)[1].replace(
+                "directory rows, search hits, Behavior labels, or edges", "directory rows or search hits"
+            )
+            self.assertEqual(raw_rules, graph_rules)
+            if benchmark == "silentswap":
+                common = "these locations can implement a swap as directly as a public function."
+                self.assertIn(common, raw)
+                self.assertIn(common, graph)
+
     def test_agent_protocol_forbids_concatenated_future_actions(self) -> None:
         prompt = system_prompt(DEFAULT_CONFIG)
         normalized = " ".join(prompt.split())
@@ -249,10 +264,6 @@ class PromptAssetTests(unittest.TestCase):
             silentswap.required_directory_sections,
             ("FILES LINKED TO THE ORIGINAL DOCUMENT",),
         )
-        self.assertIsNone(specgap.prediction_request.thinking)
-        self.assertEqual(specgap.prediction_request.reasoning_effort, "none")
-        self.assertIsNone(silentswap.prediction_request.thinking)
-        self.assertEqual(silentswap.prediction_request.reasoning_effort, "none")
 
     def test_prompt_selection_rejects_unknown_or_path_like_values(self) -> None:
         invalid = (

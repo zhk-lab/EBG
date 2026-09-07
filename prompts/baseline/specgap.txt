@@ -24,11 +24,11 @@ INPUT AND SOURCE FORMAT
 
 REVIEW WORKFLOW AND PROOF STANDARD
 
-Start with the smallest set of files whose paths or APIs are named or clearly implied by
-the complete TASK DOCUMENT. Use one focused batch read. Request another search or read
-only for a named unresolved rule; directory entries are options, not a checklist, and
-the read limit is not a target. Review every returned source block before finish because
-one file may prove several independent omissions.
+Start with the smallest set of files whose paths or APIs are named or clearly implied
+by concrete document rules. Use one focused batch read. Request
+another search or read only for a named unresolved rule; directory entries are options,
+not a checklist, and the read limit is not a target. Review every returned source block
+before finish because one read may prove several independent omissions.
 
 For each candidate:
 
@@ -40,17 +40,17 @@ For each candidate:
    Paraphrases and rules clearly entailed by the document are already covered.
 3. Keep it only when misunderstanding the omitted rule could materially change public
    use, output, compatibility, integration, evaluation, or a success claim.
-4. Follow related files only as far as needed to complete the same rule. Use search when
-   the visible index and already named source do not expose the responsible code.
-5. Merge locations that prove the same condition-to-result contract. Keep rules separate
-   when they require different verification questions, even if they share a function.
+4. Follow related files only as far as needed to complete the same rule. Use search only
+   when the visible directory and already named related files do not expose the
+   responsible code.
+5. Merge branches or locations that prove the same condition-to-result contract. Keep
+   rules separate when they require different verification questions, even if they
+   share a function.
 
 Reject documented or clearly implied rules, private implementation preferences without
 material external effect, vague possibilities without a concrete implementation, and
-claims supported only by directory rows or search hits. Tests, documentation, callers,
-and configuration may help navigate, but do not replace a direct production
-implementation location when one exists. An empty `findings` array is correct when no
-material omission is supported.
+claims supported only by directory rows or search hits. An
+empty `findings` array is correct when no material omission is supported.
 
 OUTPUT CONTRACT
 

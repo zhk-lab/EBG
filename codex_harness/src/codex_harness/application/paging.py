@@ -165,6 +165,17 @@ class OutputPages:
             result['linked_artifacts']['files'] = navigation
             if tokens(render(result)) > self.budget // 2:
                 del result['linked_artifacts']['files']
+            relations = linked.get('table_relations')
+            if relations:
+                # Keep derived source relationships discoverable even when code
+                # excerpts force pagination; preserve their evidence caveats.
+                relation_ref = child_ref(child_ref(ref, 'linked_artifacts'), 'table_relations')
+                result['linked_artifacts']['table_relations'] = {**relations, 'read_ref': relation_ref}
+                if tokens(render(result)) > self.budget // 2:
+                    result['linked_artifacts']['table_relations'] = {
+                        'read_ref': relation_ref,
+                        'group_count': len(relations.get('groups', [])),
+                    }
         if 'history_context' in value:
             result['history_context'] = value['history_context']
         # Prefer a full checklist when it leaves space for the evidence directory.

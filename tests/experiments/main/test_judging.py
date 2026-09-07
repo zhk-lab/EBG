@@ -10,16 +10,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from agentloop.errors import RetryableModelError
 from agentloop.provider import ModelCompletion
-from scripts.batch_judge import (
+from scripts.main.judge import (
     BatchJudgeError,
     JudgeBatchConfig,
     _default_client_factory,
+    _expected_model_profile,
     _load_judge_module,
     _normalize_specgap_response,
     run_batch_judges,
@@ -33,16 +34,7 @@ class RoutingClient:
 
     @property
     def profile(self) -> dict:
-        return {
-            "provider": "openai_compatible_json",
-            "base_url": self.config.base_url.rstrip("/"),
-            "model": self.config.judge_model,
-            "timeout": self.config.timeout,
-            "temperature": "provider_default",
-            "response_protocol": "json_object_v1",
-            "thinking": "disabled",
-            "reasoning_effort": "omitted",
-        }
+        return _expected_model_profile(self.config)
 
     def complete(
         self, messages: list[dict[str, str]], *, max_output_tokens: int
@@ -91,6 +83,25 @@ class ScriptedClient(RoutingClient):
 
 
 class BatchJudgeTests(unittest.TestCase):
+    def test_full_judging_uses_prediction_manifest_and_freezes_request_options(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._fixture(Path(directory), benchmarks=("feedbacktrace",))
+            config = replace(config, phase="full", request_options={"reasoning_effort": "low", "temperature": 0.0})
+            manifest_path = config.output_root / "manifest.json"
+            manifest = _read(manifest_path)
+            manifest.update(phase="full", split_file=None, split_id="full")
+            _write(manifest_path, manifest)
+            _write(config.output_root / "runs/full/feedbacktrace/graph/ft_test/prediction.json", _feedbacktrace_prediction())
+            calls = []
+            for _ in range(2):
+                result = run_batch_judges(config, client_factory=lambda: RoutingClient(config, calls), report=lambda _: None)
+                self.assertEqual(result["totals"]["completed_samples"], 1)
+            self.assertEqual(len(calls), 1)
+            with self.assertRaises(BatchJudgeError):
+                changed = replace(config, request_options={"reasoning_effort": "high"})
+                run_batch_judges(changed, client_factory=lambda: RoutingClient(changed, calls), report=lambda _: None)
+            self.assertEqual(len(calls), 1)
+
     def test_feedbacktrace_joint_judge_batch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -516,7 +527,7 @@ class BatchJudgeTests(unittest.TestCase):
                 client = _default_client_factory(config)()
 
             self.assertEqual(client.profile["model"], "glm-5-2")
-            self.assertEqual(client.profile["thinking"], "disabled")
+            self.assertEqual(client.profile["thinking"], "omitted")
             self.assertEqual(client.profile["reasoning_effort"], "omitted")
             self.assertEqual(client.profile["temperature"], "provider_default")
 
@@ -542,14 +553,14 @@ class BatchJudgeTests(unittest.TestCase):
                 benchmarks=("specgap",),
                 arms=("graph",),
                 judge_model="qwen3.7-max-2026-06-08",
+                request_options={"enable_thinking": False},
                 base_url="https://example.com/v1",
                 api_key_env="QWEN_API_KEY",
             )
             with patch.dict(os.environ, {"QWEN_API_KEY": "secret"}, clear=True):
                 client = _default_client_factory(config)()
 
-            self.assertTrue(client.disable_thinking)
-            self.assertEqual(client.thinking_parameter, "enable_thinking")
+            self.assertEqual(client.profile["request_options"], {"enable_thinking": False})
 
     @staticmethod
     def _fixture(

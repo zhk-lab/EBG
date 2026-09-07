@@ -9,13 +9,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from agentloop.errors import AgentLoopError
 from agentloop.benchmark_configs import repo_benchmark_config
-from scripts.agentloop_cli import _client, _parser, _run, _trace_prediction_request
+from scripts.main.predict import _client, _run
 from tests.support import ProjectTemporaryDirectory, make_repo_bundle, make_trace_bundle
 
 
@@ -26,21 +26,16 @@ class PrepareOnlyTests(unittest.TestCase):
             model="gpt-5-6-luna",
             api_key_env="BEG_TEST_MISSING_KEY",
             timeout=30.0,
+            request_options={"reasoning_effort": "none"},
         )
 
         with patch.dict(os.environ, {}, clear=True):
-            repo_client = _client(
-                args,
-                prediction_request=repo_benchmark_config(
-                    "silentswap"
-                ).prediction_request,
-            )
+            repo_client = _client(args)
             trace_client = _client(args)
 
         self.assertEqual(repo_client.api_key, "unused-placeholder")
         self.assertEqual(repo_client.model, "gpt-5-6-luna")
-        self.assertFalse(repo_client.disable_thinking)
-        self.assertEqual(repo_client.reasoning_effort, "none")
+        self.assertEqual(repo_client.profile["request_options"], {"reasoning_effort": "none"})
         self.assertEqual(
             repo_client.profile["response_protocol"],
             "json_object_v1",
@@ -63,7 +58,7 @@ class PrepareOnlyTests(unittest.TestCase):
         ):
             _client(args)
 
-    def test_repo_runner_injects_benchmark_prediction_request(self) -> None:
+    def test_repo_runner_preserves_configured_prediction_request(self) -> None:
         with ProjectTemporaryDirectory() as temporary:
             artifact_root = temporary / "artifacts"
             make_repo_bundle(
@@ -83,44 +78,20 @@ class PrepareOnlyTests(unittest.TestCase):
                 run_root=temporary / "run",
             )
             args.prepare_only = False
+            args.request_options = {"reasoning_effort": "low"}
             captured: dict = {}
 
             def stop_after_client_binding(_args, **kwargs):
-                captured.update(kwargs)
+                captured.update(_args.request_options)
                 raise AgentLoopError("stop after client binding")
 
             with patch(
-                "scripts.agentloop_cli._client",
+                "scripts.main.predict._client",
                 side_effect=stop_after_client_binding,
             ), self.assertRaisesRegex(AgentLoopError, "client binding"):
                 _run(args)
 
-        request = captured["prediction_request"]
-        self.assertIsNone(request.thinking)
-        self.assertEqual(request.reasoning_effort, "none")
-
-    def test_repo_request_configs_match_the_frozen_evaluation_profile(self) -> None:
-        specgap = repo_benchmark_config("specgap").prediction_request
-        silentswap = repo_benchmark_config("silentswap").prediction_request
-
-        self.assertEqual(
-            specgap.public_dict(),
-            {"thinking": "omitted", "reasoning_effort": "none"},
-        )
-        self.assertEqual(
-            silentswap.public_dict(),
-            {"thinking": "omitted", "reasoning_effort": "none"},
-        )
-
-    def test_feedbacktrace_uses_provider_specific_non_thinking_control(self) -> None:
-        self.assertEqual(
-            _trace_prediction_request("gpt-5-6-luna").public_dict(),
-            {"thinking": "omitted", "reasoning_effort": "none"},
-        )
-        self.assertEqual(
-            _trace_prediction_request("deepseek-v4-flash").public_dict(),
-            {"thinking": "disabled", "reasoning_effort": "omitted"},
-        )
+        self.assertEqual(captured, {"reasoning_effort": "low"})
 
     def test_repo_prepare_only_is_api_free_resumable_and_immutable(self) -> None:
         with ProjectTemporaryDirectory() as temporary:
@@ -335,30 +306,25 @@ class PrepareOnlyTests(unittest.TestCase):
         artifact_root: Path,
         run_root: Path,
     ):
-        return _parser().parse_args(
-            [
-                "--benchmark",
-                benchmark,
-                "--input-id",
-                input_id,
-                "--arm",
-                arm,
-                "--artifact-root",
-                str(artifact_root),
-                "--output",
-                str(run_root),
-                "--schema-root",
-                str(PROJECT_ROOT / "schemas"),
-                "--api-key-env",
-                "BEG_TEST_MISSING_KEY",
-                "--prepare-only",
-            ]
+        return SimpleNamespace(
+            benchmark=benchmark,
+            input_id=input_id,
+            arm=arm,
+            artifact_root=artifact_root,
+            output=run_root,
+            schema_root=PROJECT_ROOT / "schemas",
+            api_key_env="BEG_TEST_MISSING_KEY",
+            prepare_only=True,
+            base_url=None,
+            model=None,
+            timeout=600.0,
         )
+
 
     @staticmethod
     def _no_api_client():
         return patch(
-            "scripts.agentloop_cli._client",
+            "scripts.main.predict._client",
             side_effect=AssertionError("prepare-only must not construct a client"),
         )
 

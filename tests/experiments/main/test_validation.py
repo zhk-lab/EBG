@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from scripts.audit_repo_backend import _read_token_metrics
+from scripts.main.prepare import _read_token_metrics
 
 
 class RepoBackendAuditTests(unittest.TestCase):

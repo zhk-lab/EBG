@@ -7,7 +7,7 @@ name = "beg"
 version = "0.1.0"
 description = "Deterministic Behavioral Evidence Graph construction"
 requires-python = ">=3.11"
-dependencies = ["jsonschema>=4.20", "tiktoken>=0.7"]
+dependencies = ["jsonschema>=4.20", "tiktoken>=0.7", "python-dotenv>=1.0"]
 
 [project.optional-dependencies]
 test = ["jsonschema>=4.20"]
@@ -23,6 +23,8 @@ include = [
   "agentloop.*",
   "tracereview",
   "tracereview.*",
+  "scripts",
+  "scripts.*",
 ]
 namespaces = false
 

@@ -1,10 +1,10 @@
 核对需求清单与原文证据，判断哪些问题值得披露。
-Prompt、Plan 至少一项非空即可；仅用 Plan 时核对选择时保存的当前 Repo，不因缺少历史 Prompt 而停止。当前代码本身不证明过去的执行过程；随附初始代码、测量记录和汇报仍可按其来源身份核对，不要求所有证据都来自 Hook Trace。
+核对检查点中的相关 Prompt、Plan 和冻结 Repo。当前代码本身不证明过去的执行过程；随附初始代码、测量记录和汇报仍可按其来源身份核对，不要求所有证据都来自 Hook Trace。
 requirement 是要求；repo 是实现及改动；action 是调用和结果；response 是 Agent 声明。
 匹配仅表示相关。按原文判断差异与影响，引用 source；未匹配不等于未执行。
 涉及计算结果的要求，结合调用方传入的数据、参数及外层控制流程核对，不能仅凭被调用函数未修改就判断满足要求。context 中的 calls/feeds 是静态关系，enclosing scope 是外层源码，不证明历史执行。重复源码通过 content_ref 读取；需要上下文时继续展开。
 最终回复将 source 转为文件路径与行号（如 test_harness/retry.py@1-8），或实际命令、关键结果与回复原文；省略内部编号及读取引用。范围用任务内容和 Plan 路径说明，历史版本按需标注“任务开始前／结束后”；不要将历史行号说成当前文件位置，无须引用的细节省略。
-过大材料按 read_ref/next 继续调用 beg_build_evidence_groups，保留 task_id，省略 requirements。
+过大材料按 read_ref/next 继续调用 beg_evidence，保留 check_id，省略 question 和 refs。
 navigation 是所引 Plan 章节与文件名的词面导航，不是实现证据。未命中时可沿候选或 repository 引用读取文件目录，再沿 Symbol 引用读取冻结源码；content_ref 可直达分页原文。目录和候选均不代表已核验。
 repository 目录区分已采集内容与仅记录存在的文件。content_status 为 not_collected 不等于不存在；size_bytes 仅是观察时大小，不证明文件可加载或行为正确。未列出也不能直接断言不存在，应先核对采集范围和限制。
 trace_context 保留任务内未直接匹配要求的调用、结果和 Agent 回复，包括只读测试的动作及无文件名的整体完成声明；结合原始轮次核对，不自动认定其对应某条要求。
