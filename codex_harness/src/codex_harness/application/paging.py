@@ -134,26 +134,44 @@ class OutputPages:
 
     def _evidence(self, ref: str, value: dict, offset: int) -> str:
         groups = list(value["evidence_groups"].items())
+        checklist = 'questions' if 'questions' in value else 'requirements'
         if offset >= len(groups):
             raise HarnessError("offset is outside the evidence directory.")
         result = {
             "read_ref": ref,
             "beg_disclose_prompt": "核对原文后披露；未展开不等于未匹配。按引用继续调用本工具。",
             "instructions_ref": child_ref(ref, "beg_disclose_prompt"),
-            "requirements": {"read_ref": child_ref(ref, "requirements")},
+            checklist: {"read_ref": child_ref(ref, checklist)},
             "evidence_groups": {}, "total_groups": len(groups),
         }
+        if 'check_id' in value:
+            result['check_id'] = value['check_id']
         if 'changes' in value:
             result['changes'] = value['changes']
         if 'repository' in value:
             result['repository'] = value['repository']
         if 'trace_context' in value:
             result['trace_context'] = {'read_ref': child_ref(ref, 'trace_context')}
+        if 'research_context' in value:
+            result['research_context'] = {'read_ref': child_ref(ref, 'research_context')}
+        if 'linked_artifacts' in value:
+            linked = value['linked_artifacts']
+            result['linked_artifacts'] = {
+                'note': '引用到的配置与输入来源材料；用于核实结论前提，按引用展开。',
+                'read_ref': child_ref(ref, 'linked_artifacts'),
+            }
+            navigation = [{'path': item['path'], 'from': item['from'], 'read_ref': item['read_ref']}
+                          for item in linked['items']]
+            result['linked_artifacts']['files'] = navigation
+            if tokens(render(result)) > self.budget // 2:
+                del result['linked_artifacts']['files']
+        if 'history_context' in value:
+            result['history_context'] = value['history_context']
         # Prefer a full checklist when it leaves space for the evidence directory.
-        short = result["requirements"]
-        result["requirements"] = value["requirements"]
+        short = result[checklist]
+        result[checklist] = value[checklist]
         if tokens(render(result)) > self.budget // 2:
-            result["requirements"] = short
+            result[checklist] = short
         for index in range(offset, len(groups)):
             key, group = groups[index]
             pointer = child_ref(child_ref(ref, "evidence_groups"), key)

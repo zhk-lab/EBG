@@ -1,24 +1,55 @@
 ---
 name: beg-disclose
-description: 用户要求检查当前会话中任务的完成情况、需求遗漏、计划偏差或验证缺口时，用 BEG 原文证据判断值得披露的问题。
+description: Use source evidence to check and disclose issues affecting completion or improvement claims, consequential approach changes, unresolved requirements, or a user-requested full review.
 ---
 
-1. 调用 `beg_list_task_sources` 查看 Prompt 和 Markdown Plan 候选版本。默认使用当前会话，也可传 Hook 提供的 session_id。需要读取当前 Plan 或没有已登记仓库时，传 `repo_path`；没有 Hook 历史也可检查当前代码。
-2. Prompt、Plan 至少有一项有效内容即可。有历史任务时选择连续 Prompt 区间及可选 Plan，排除本次检查请求，end_prompt 须属于已结束的轮次。没有有效历史区间但有 Plan 时，直接选择 Plan，不因缺少历史 Prompt 而停止。
-3. 历史检查调用 `beg_select_task(start_prompt, end_prompt, plan_ids)`，无 Plan 时传空列表。仅用 Plan 时调用 `beg_select_task(plan_ids=[...])`，同时省略两个 Prompt 端点；Harness 保存当前 Repo 用于静态实现核对，不关联检查请求的 Trace，也不生成历史差异。读取返回的 sources 原文，保留 task_id；已指定但无效的历史区间不能悄悄降级为当前代码检查。
-4. 整理最终有效要求，体现后续修改、取消、条件和例外，保留原文引用；不能根据实现反向改写要求。Plan 来源不明时保持 unknown；有上下文依据时在引用中注明 origin 为 user_plan 或 agent_plan。
-5. 调用 `beg_build_evidence_groups(task_id, requirements)`，每条要求格式如下：
+## Autoresearch review
 
-```json
-{"id":"R1","check":"最终有效要求","refs":[{"source_id":"P98","quote":"原文中的连续片段"}]}
-```
+Check whether the actual work satisfies the applicable requirements and whether the evidence supports the proposed conclusion. For each consequential claim, connect the required condition to the observed execution, then decide what conclusion that evidence permits. Matching numbers or listing configuration values is evidence collection, not the decision. Apply the relevant checks below; do not announce a checklist on every iteration.
 
-合并或修订要求时保留相关来源；引文重复时附字符 start。工具参数直接传入，无需先向用户输出 YAML。
+### 1. Was the required work actually completed?
 
-6. 核对证据中的要求、代码、操作结果与 Agent 声明，披露差异、影响和 source 位置。匹配仅表示相关，未匹配不等于未执行；无法确认及尚未检查的部分明确说明。只作披露，不修改代码、运行新测试或执行修复。
+- Trace the entry point, effective configuration, executed branch and resulting output. Distinguish code that could run from evidence that the required operation did run. Check what happened after errors or missing prerequisites, not just the outer command's exit status.
+- Compare the operation and its result with the success conditions. Request construction, actual transmission and a valid response establish different facts. If a substitute ran instead of the required operation, report what actually succeeded and which requirement remains unmet; do not promote the substitute's success to full completion. Creating an output file likewise does not establish the required result.
+- Examples: mock or dry-run fallback, a local substitute for an external service, a disabled feature flag, swallowed exceptions, skipped batch items, empty outputs, and cached or old results returned instead of fresh execution. Such behavior is an issue only when it changes the required operation or leaves a claim unsupported; an explicitly permitted fallback or cache can satisfy the task.
 
-最终回复使用可读的来源：代码与 Plan 写为 `文件路径@行号`（如 `test_harness/retry.py@1-8`）；执行记录写实际命令和关键结果，声明引用必要的回复原文。省略快照、事件、任务、Prompt、Plan 和证据组的内部编号及读取引用，这些仅用于内部取证与工具调用。检查范围用任务内容及 Plan 路径说明；需要区分历史版本时写“任务开始前／结束后”，不要将历史行号说成当前文件位置。无须引用的细节直接省略。
+### 2. Was verification sufficient for the claim?
 
-三个工具返回过大时会给出 read_ref 和 next。继续调用同一个工具：传 read_ref 与 offset；证据读取还需 task_id，省略 requirements。目录条目含 read_ref 时可继续展开，next 读取后续目录或文本。按需分批核对，保留发现和引用，不把未展开的材料当成已检查。changes 引用可检查未关联到要求的代码改动。
+- Match the tests or experiments actually executed to the behavior, scope and version being claimed. Identify what a passing result establishes and what it leaves unverified. If the claim depends on an untested behavior, narrow the claim or obtain the missing verification. Lack of coverage does not itself prove the implementation is wrong. Reading test code is not evidence that tests ran.
+- Examples: a test filter selecting only a subset, skipped tests, expected failures counted as successes, disabled assertions, unit tests presented as end-to-end verification, mocked integration boundaries, untested error paths, or a test that checks only output existence. Require real integration or broader coverage only when the task or claim depends on it.
+- After a material fix, check whether the relevant behavior was verified on the retained implementation. Earlier passing results cannot validate later changes. A recovered environment error need not remain a reported defect. If evidence is insufficient, narrow the claim or perform justified verification within existing authorization; do not expand every task into an exhaustive test campaign.
 
-历史检查只使用选定的历史材料，不用当前文件补作历史快照。仅用 Plan 时，依据选定的 Plan 原文和选择时保存的当前 Repo 判断实现遗漏或计划偏差；说明是当前代码核对，缺少历史 Trace 不妨碍静态检查，但不能据此确认过去运行过测试、任务改动范围或历史完成声明。新会话会清理旧会话记录，旧引用失效。
+### 3. Is the claimed improvement comparable?
+
+- State the intended comparison: the method itself, particular configurations, or complete workflows. Identify allowed changes, required controls and consequential unspecified conditions. Resolve important assumptions before choosing a search or adopting results. Permission to vary a condition does not make its effect on the comparison irrelevant; do not invent a prohibition where none exists.
+- Compare actual evaluation inputs and measurement methods: sample membership, splits, preprocessing, labels, metric definitions, denominators and aggregation. The same filename does not establish the same evaluated data. Where independent evaluation is required, examine data origins and use: renamed duplicates, fitting on held-out examples, or answer-bearing caches can compromise independence. Validation-guided hyperparameter selection is not automatically training-data leakage.
+- Compare relevant configuration and resource conditions: hyperparameters, training epochs or steps, stopping rules, search attempts across all phases, restarts, seeds, compute or API budgets, hardware and cache state. Fixed cost per fit does not establish equal total search opportunities. Check how best, mean or final-run results were selected and compared.
+- For each material difference, decide whether it is the intended change, an established comparable condition, or another possible explanation for the gap. If the evidence cannot separate those effects, explicitly identify the difference and explain what cannot be concluded. The measured score can remain valid while the method comparison remains inconclusive. A tuned configuration may still be recommended, with that limitation attached. Unequal budgets and maximum selection are not violations by themselves.
+
+### 4. Is the conclusion supported by the delivered evidence?
+
+- Match each completion, effectiveness or improvement claim to its execution records, configuration and retained code or artifact version. Check that reported numbers belong to the selected run and that a later edit or revert did not invalidate the connection.
+- Consider the full relevant record, including regressions and failures. Examples: reporting only favorable trials, comparing a candidate maximum with a baseline mean, ignoring earlier search phases, combining metrics from different versions, or treating a small single-seed difference as a reliable improvement.
+- Evaluate the proposed wording, not just the arithmetic: does it claim completion, effectiveness or superiority beyond what the evidence establishes? When several factors changed, distinguish the measured observation from its possible explanations. Replace an unsupported claim with a supported one and explain the specific limitation. A generic statement such as "in these experiments" does not explain a known confound; a caveat about one condition does not address a different changed condition.
+
+These examples are investigation leads, not automatic findings or an exhaustive list. Follow the evidence relevant to the claim. Static code, a missing trace, or an unmatched reference alone does not prove what happened. Use `beg_evidence` for concrete unresolved premises rather than turning suspicions into findings.
+
+Disclose supported issues that affect the conclusion or the user's decision, with their impact, evidence and remedy. A material limitation can require disclosure even when no task rule was violated. If evidence establishes a mismatch, explain it; if an essential premise is unknown, state the uncertainty. Put the specific difference and its consequence alongside the recommendation in the final response, not only in an artifact. Describe repaired issues according to the final state and avoid repeating resolved or unchanged findings.
+
+Assess the claim actually being delivered: use `issue` for a supported unmet condition or material limitation needing disclosure, `uncertain` for an unresolved essential premise, and `clear` only when the proposed conclusion is supported and any material limits are already reflected in its user-facing wording. Do not record `clear` solely because records match, tests passed, changes were permitted, or no universal claim was made.
+
+## Active checks during ordinary work
+
+Use `result` before adopting or reporting results, `adjustment` for consequential changes after a blocked step, and `ambiguity` for important unresolved requirements. Routine implementation choices need no warning. Hooks cannot infer every decision, so state the proposed claim or decision explicitly.
+
+1. Read a notified checkpoint with `beg_context(check_id=...)`, or create one with `beg_context(trigger=..., focus=...)`. After verification, use its new checkpoint; if `execution_scope` identifies a later verification, read `latest_check_id`. Without a notification, create a `result` check explicitly.
+2. Apply the four review areas to the returned requirements, implementation, linked materials and execution trace. When necessary, use `beg_evidence(check_id, question, refs)` to investigate a specific factual premise; refs are optional when frozen sources provide the anchors. Use returned `read_ref` values to expand existing evidence.
+3. Disclose material findings promptly, or continue if none are supported. Save the assessment with `beg_context(check_id, conclusion, summary)`: `clear`, `issue` or `uncertain`, with evidence and handling. Reading a checkpoint is not an assessment; saving one is not user-facing disclosure.
+
+Reuse checks only while the focus, execution and captured state remain applicable. Use `prior_assessments` to avoid repetition. Never use an old judgment to verify a new result. Review is read-only; return to ordinary work for authorized repairs or verification. Stop is a fallback continuation and cannot retract an already displayed response; check before adoption and the first completion report.
+
+For exact quotation formats, evidence expansion, historical sources or pagination, read the relevant section of [Tool workflows](references/tool-workflows.md).
+
+## Full review explicitly requested by the user
+
+Read the full-review section of [Tool workflows](references/tool-workflows.md) before using `beg_list_task_sources`, `beg_select_task` and `beg_build_evidence_groups`. Ordinary completion reporting uses the two-tool workflow above. A full review discloses findings; it does not itself authorize edits or new experiments.

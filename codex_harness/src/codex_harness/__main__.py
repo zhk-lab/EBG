@@ -31,6 +31,11 @@ def main() -> int:
                               token_budget=args.token_budget)
             print(f'Integration files written to {Path(args.output).resolve()}')
             return 0
+        if args.command == 'hook' and (Path(args.state_dir) / 'hooks.disabled').is_file():
+            # Already-loaded Codex hooks can outlive removal of hooks.json.
+            # Do not initialize storage or record events while locally disabled.
+            print('{}')
+            return 0
         harness = Harness(args.state_dir, token_budget=args.token_budget)
         if args.command == 'serve':
             from .tools.mcp_server import create_server

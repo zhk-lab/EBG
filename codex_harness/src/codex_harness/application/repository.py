@@ -31,7 +31,7 @@ def bundle(root: Path, artifacts: list[RepoArtifact], document: str = "") -> Vis
 
 
 def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
-            session_id: str | None = None) -> tuple[dict[str, int], list[str]]:
+            session_id: str | None = None) -> tuple[dict[str, int], list[str], dict[str, dict[str, Any]]]:
     if not root.is_dir():
         raise HarnessError(f"Repository directory is unavailable: {root}")
     names = None
@@ -53,6 +53,7 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
         names.sort()
     files: dict[str, int] = {}
     notes: list[str] = []
+    uncollected: dict[str, dict[str, Any]] = {}
     observed = {}
     for name in names:
         path = root / name
@@ -64,11 +65,18 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
         if not resolved.is_relative_to(root):
             notes.append(f"{name}: symlink points outside the registered repository")
             continue
-        if path.suffix.lower() in BINARY_EXTENSIONS or not path.is_file():
+        if not path.is_file():
             continue
         try:
             before = path.stat()
+            observed[path] = (before.st_mtime_ns, before.st_size)
+            uncollected[name] = {'exists': True, 'size_bytes': before.st_size,
+                                 'content_status': 'not_collected', 'reason': 'read_error'}
+            if path.suffix.lower() in BINARY_EXTENSIONS:
+                uncollected[name]['reason'] = 'binary_extension'
+                continue
             if before.st_size > max_file_bytes:
+                uncollected[name]['reason'] = 'size_limit'
                 notes.append(f"{name}: exceeds file collection limit ({max_file_bytes} bytes)")
                 continue
             raw = path.read_bytes()
@@ -76,12 +84,16 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
             if (before.st_mtime_ns, before.st_size) != (after.st_mtime_ns, after.st_size):
                 raise HarnessError(f"{name} changed during collection; retry refresh after the writer finishes.")
             if b"\0" in raw:
+                uncollected[name]['reason'] = 'binary_content'
                 continue
             content = raw.decode("utf-8-sig")
         except (OSError, UnicodeDecodeError) as error:
+            if isinstance(error, UnicodeDecodeError):
+                uncollected[name]['reason'] = 'non_utf8'
             notes.append(f"{name}: {type(error).__name__}; not collected")
             continue
         files[name] = store.cache_file(str(root), name, content, session_id=session_id)
+        del uncollected[name]
         observed[path] = (after.st_mtime_ns, after.st_size)
     for path, expected in observed.items():
         try:
@@ -90,7 +102,7 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
             raise HarnessError(f"{path.name} changed during collection; retry refresh.") from error
         if (stat.st_mtime_ns, stat.st_size) != expected:
             raise HarnessError(f"{path.name} changed during collection; retry refresh after the writer finishes.")
-    return files, notes
+    return files, notes, uncollected
 
 
 def artifact(root: Path, path: str, content: str) -> RepoArtifact | None:

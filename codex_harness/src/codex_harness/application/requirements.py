@@ -34,7 +34,7 @@ def normalize_requirements(
         if not isinstance(check, str) or not check.strip() or not value.get("refs"):
             raise HarnessError(f"{identifier} needs check text and at least one original source reference.")
         refs = []
-        for ref in value["refs"]:
+        for index, ref in enumerate(value["refs"]):
             source = known.get(ref.get("source_id"))
             if source is None:
                 raise HarnessError(f"Unknown requirement source: {ref.get('source_id')}")
@@ -43,11 +43,32 @@ def normalize_requirements(
                 raise HarnessError("Each source reference needs a nonempty verbatim quote.")
             content = source["content"]
             start = ref.get("start", content.find(quote))
-            if not isinstance(start, int) or start < 0 or content[start:start + len(quote)] != quote:
-                raise HarnessError(f"Quote is not verbatim in {source['id']}.")
-            if "start" not in ref and content.find(quote, start + 1) >= 0:
+            if not isinstance(start, int):
+                raise HarnessError(f'{identifier} refs[{index}]: start must be an integer character offset.')
+            end = start + len(quote)
+            ambiguous = False
+            valid = start >= 0 and content[start:end] == quote
+            if not valid and ('\r\n' in content or '\r\n' in quote):
+                # JSON/YAML readers may present CRLF as LF. Match only that
+                # presentation difference; references keep the original bytes.
+                chars = list(re.finditer(r'\r\n|[^\r]|\r', content))
+                normalized = ''.join(m.group().replace('\r\n', '\n') for m in chars)
+                offsets = [m.start() for m in chars] + [len(content)]
+                normalized_quote = quote.replace('\r\n', '\n')
+                position = (offsets.index(start) if 'start' in ref and start in offsets
+                            else -1 if 'start' in ref else normalized.find(normalized_quote))
+                if position >= 0 and normalized[position:position + len(normalized_quote)] == normalized_quote:
+                    start, end = offsets[position], offsets[position + len(normalized_quote)]
+                    ambiguous = 'start' not in ref and normalized.find(normalized_quote, position + 1) >= 0
+                    valid = True
+            if not valid:
+                raise HarnessError(
+                    f"{identifier} refs[{index}]: quote is not verbatim in {source['id']}. "
+                    "Copy a continuous original-language span; use separate refs for disjoint spans. "
+                    "Omit start unless the quote repeats; do not guess offsets, translate or insert ellipses.")
+            if ambiguous or ("start" not in ref and content.find(quote, start + 1) >= 0):
                 raise HarnessError("Quote occurs more than once; supply its character start offset.")
-            resolved = source_ref(source, start, start + len(quote))
+            resolved = source_ref(source, start, end)
             origin = ref.get('origin')
             if origin is not None:
                 if source['kind'] != 'plan' or origin not in {'user_plan', 'agent_plan', 'unknown'}:

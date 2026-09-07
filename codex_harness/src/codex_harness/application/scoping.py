@@ -27,10 +27,10 @@ def select_plan_task(log: SessionLog, session_id: str, plan_ids: list[str]) -> d
                         'label': f"{plan['path']} (selected version; origin unknown)", 'content': plan['content']})
     if not any(s['content'].strip() for s in sources):
         raise HarnessError('Prompt and Plan cannot both be empty; selected Plans contain no text.')
-    files, notes = capture(log.store, root, max_file_bytes=log.max_file_bytes, session_id=session_id)
+    files, notes, uncollected = capture(log.store, root, max_file_bytes=log.max_file_bytes, session_id=session_id)
     identifier = uuid4().hex[:12]
     return {'id': f'task_{identifier}', 'repo_path': str(root), 'baseline': {}, 'current_files': files,
-            'sources': sources, 'requirements': [], 'collection_notes': notes,
+            'sources': sources, 'requirements': [], 'collection_notes': notes, 'uncollected_files': uncollected,
             'scope': {'mode': 'current', 'session_id': session_id, 'plan_ids': plan_ids,
                       'repo_after': f'current_{identifier}', 'event_ids': []}}
 
@@ -38,7 +38,7 @@ def select_plan_task(log: SessionLog, session_id: str, plan_ids: list[str]) -> d
 def select_task(log: SessionLog, session_id: str, start_prompt: str, end_prompt: str,
                 plan_ids: list[str]) -> dict[str, Any]:
     events = log.events(session_id)
-    prompts = {f"P{e['turn']}": e for e in events if e['kind'] == 'user'}
+    prompts = {f"P{e['turn']}": e for e in events if e['kind'] == 'user' and not e.get('internal')}
     start, end = prompts.get(start_prompt), prompts.get(end_prompt)
     if not start or not end or start['turn'] > end['turn']:
         raise HarnessError("Select existing start_prompt/end_prompt in chronological order.")
@@ -49,7 +49,7 @@ def select_task(log: SessionLog, session_id: str, start_prompt: str, end_prompt:
         raise HarnessError("Historical boundary snapshot missing; select a completed end turn. Live files cannot replace history.")
     selected = [e for e in events if start['turn'] <= e['turn'] <= end['turn'] and e['seq'] <= after['event_cutoff']]
     sources = [{'id': f"P{e['turn']}", 'kind': 'user', 'label': f"Prompt P{e['turn']}", 'content': e['content']}
-               for e in selected if e['kind'] == 'user']
+               for e in selected if e['kind'] == 'user' and not e.get('internal')]
     available = {p['id']: p for p in log.plans(session_id, cutoff=after['event_cutoff'], last_turn=end['turn'])}
     if len(set(plan_ids)) != len(plan_ids):
         raise HarnessError("Select each Plan version only once.")
@@ -66,4 +66,6 @@ def select_task(log: SessionLog, session_id: str, start_prompt: str, end_prompt:
     notes = list(dict.fromkeys([*before['notes'], *after['notes']]))
     return {'id': f"task_{uuid4().hex[:12]}", 'repo_path': str(log.root(session_id)),
             'baseline': before['files'], 'sources': sources, 'requirements': [],
-            'collection_notes': notes, 'scope': scope}
+            'collection_notes': notes, 'scope': scope,
+            'uncollected_files': after.get('uncollected_files', {}),
+            'baseline_uncollected_files': before.get('uncollected_files', {})}

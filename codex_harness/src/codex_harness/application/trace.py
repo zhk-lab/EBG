@@ -22,7 +22,7 @@ def build_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
     pairs = {}
     for event in events:
         kind = event["kind"]
-        if kind == "tool_result":
+        if kind == "tool_result" or event.get('internal'):
             continue
         text = event["content"]
         event_type = {"user": "user_prompt", "assistant": "assistant_response", "tool_call": "tool_exchange"}[kind]

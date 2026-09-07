@@ -27,6 +27,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT PRIMARY KEY, data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    id TEXT PRIMARY KEY, data TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS active_session (
                     singleton INTEGER PRIMARY KEY CHECK(singleton=1), id TEXT NOT NULL
                 );
@@ -137,7 +140,7 @@ class Store:
                 return False
             # Also discard tables from the former manual-registration workflow.
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            for table in ("outputs", "views", "tasks", "snapshots", "recorded_events",
+            for table in ("outputs", "views", "tasks", "checkpoints", "snapshots", "recorded_events",
                           "recorded_turns", "recordings", "files", "events", "sessions"):
                 if table in tables:
                     db.execute(f"DELETE FROM {table}")

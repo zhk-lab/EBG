@@ -65,6 +65,26 @@ def explicit_symbol_match(text: str, symbol: str) -> bool:
     return any(literal_match(span, symbol) for span in re.findall(r'`([^`\n]+)`', text))
 
 
+def source_line_paths(requirement: dict, sources: list[dict], paths: list[str]) -> dict:
+    """Retain file anchors on the quoted source lines, without expanding the demand."""
+    known = {s['id']: s for s in sources}
+    anchors = {}
+    for ref in requirement['refs']:
+        source = known[ref['source_id']]
+        text = source['content']
+        start = text.rfind('\n', 0, ref['start']) + 1
+        end = text.find('\n', max(ref['start'], ref['end'] - 1))
+        end = len(text) if end < 0 else end
+        context = text[start:end]
+        if source['kind'] == 'repo' and source.get('path') in paths:
+            anchors.setdefault(source['path'], {'source': ref['source'], 'content': ref['content']})
+        for path in paths:
+            if literal_match(context, path, path=True):
+                anchors.setdefault(path, {'source': f"{source['label']}@{text.count(chr(10), 0, start) + 1}",
+                                          'content': context})
+    return anchors
+
+
 def section_navigation(requirement: dict[str, Any], sources: list[dict[str, Any]],
                        paths: list[str]) -> list[dict[str, str]]:
     """Use enclosing Markdown headings only as labeled navigation, not evidence."""

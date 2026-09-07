@@ -7,14 +7,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .matching import direct_repo_roots, explicit_symbol_match, literal_match, section_navigation
+from .matching import direct_repo_roots, explicit_symbol_match, literal_match, section_navigation, source_line_paths
+from .checks import Checks
 from .render import PROMPT
 from .paging import OutputPages
 from .repository import GRAPH_VERSION, capture, construct_graph, module_statement_span
+from .artifacts import linked_artifacts
 from .requirements import normalize_requirements
+from .research import research_context
 from .storage import HarnessError, Store
 from .sessions import SessionLog
 from .scoping import select_plan_task, select_task as make_scoped_task
+from .selection import compact_contexts, enclosing_contexts, share_repo_excerpts, value_contexts
 from .trace import build_trace, matched_events
 
 
@@ -26,6 +30,7 @@ class Harness:
         self.token_budget = token_budget
         self.max_file_bytes = max_file_bytes
         self.sessions = SessionLog(self.store, max_file_bytes)
+        self.checks = Checks(self)
 
     @property
     def pages(self) -> OutputPages:
@@ -45,7 +50,7 @@ class Harness:
                      for p in self.sessions.plans(session_id)]
             notes = []
             if repo_path is not None:
-                files, notes = capture(self.store, self.sessions.root(session_id),
+                files, notes, _ = capture(self.store, self.sessions.root(session_id),
                                        max_file_bytes=self.max_file_bytes, session_id=session_id)
                 current = [{'id': f'L{file_id}', 'path': path, 'version': 'current'}
                            for path, file_id in files.items() if Path(path).suffix.lower() in {'.md', '.markdown'}]
@@ -128,7 +133,11 @@ class Harness:
         view = self.store.view(refreshed['view_id'])
         scope = view['scope']
         if scope.get('mode') == 'current':
-            prompt = PROMPT + '\n本次按选定 Plan 核对选择时保存的当前 Repo。没有历史基线或任务 Trace，不能据此断言改动范围、测试是否运行或历史完成声明是否属实。'
+            prompt = PROMPT + '\n本次按选定 Plan 核对选择时保存的当前 Repo，不自动关联历史 Trace。已有初始材料、实验记录和汇报可按其来源身份核对；历史材料缺失不自动构成任务违规，不逐条重复未运行或未完成的疑问。'
+        elif scope.get('mode') == 'checkpoint':
+            prompt = ('根据引用原文核对具体疑问；疑问不是用户要求，也不是已证实的问题。'
+                      '代码来自触发时保存的快照，Trace 截至该检查点；匹配仅表示相关。'
+                      '只有影响任务结论或后续决策的问题才需要披露。未采集不等于不存在，静态代码不证明执行。')
         else:
             prompt = (PROMPT + f"\n任务范围：{scope['start_prompt']}～{scope['end_prompt']}；"
                       f"Repo：{scope['repo_before']} → {scope['repo_after']}。")
@@ -139,8 +148,41 @@ class Harness:
             'beg_disclose_prompt': prompt,
             'requirements': {r['id']: r['check'] for r in view['requirements']},
             'evidence_groups': {r['id']: self.group(view, r) for r in view['requirements']},
-            'repository': {'count': len(view['files']), 'read_ref': f"{view['view_id']}:files:index"},
+            'repository': {
+                'count': len(view['files']) + len(view.get('uncollected_files', {})),
+                'content_count': len(view['files']), 'read_ref': f"{view['view_id']}:files:index",
+                'note': '目录记录采集范围内观察到的文件；未采集不等于不存在。二进制等仅保留存在信息，不能据此确认可运行。忽略目录、Git 忽略项和采集错误可能使目录不完整；changes 只比较已采集文本，不包含未读取内容的文件。',
+            },
         }
+        share_repo_excerpts(payload['evidence_groups'])
+        if scope.get('mode') == 'checkpoint':
+            payload['check_id'] = scope['check_id']
+            payload['questions'] = payload.pop('requirements')
+            for group in payload['evidence_groups'].values():
+                group['cited_sources'] = group.pop('requirement')
+            check = self.checks.get(scope['check_id'])
+            selected = set(check['selected_plans'])
+            seeds = [(s.get('path', ''), s['content']) for s in view['sources'] if s['id'] in selected]
+            anchors = set(check['anchors'])
+            calls = {e.get('call_id') for e in check['events'] if e['id'] in anchors}
+            seeds = [('', e['content']) for e in check['events'] if e['kind'] == 'tool_result'
+                     and (e.get('call_id') in calls if anchors else e['turn_id'] == check['turn_id'])] + seeds
+            seeds.extend(('', ref['content']) for r in view['requirements'] for ref in r['refs'])
+            for group in payload['evidence_groups'].values():
+                for entry in group.get('actual', {}).get('repo', []):
+                    path = entry['source'].split(':', 1)[-1].split('::', 1)[0]
+                    seeds.append((path if path in view['files'] else '', entry.get('content', '')))
+            linked = linked_artifacts(self.store, view, seeds)
+            if linked:
+                payload['linked_artifacts'] = linked
+        research = research_context(self.store, view)
+        if research:
+            payload['research_context'] = research
+        if view.get('history_snapshots'):
+            payload['history_context'] = {
+                'note': '按回合查找中间代码版本；快照只证明回合边界状态，具体执行版本须结合该回合调用与改动核对。',
+                'read_ref': f"{view['view_id']}:history:index",
+            }
         matched_trace = {
             event['source']
             for group in payload['evidence_groups'].values()
@@ -175,35 +217,53 @@ class Harness:
         self.sessions.current(scope['session_id'])
         root = Path(task['repo_path'])
         current = scope.get('mode') == 'current'
-        files = task['current_files'] if current else self.sessions.snapshot(scope['session_id'], scope['repo_after'])['files']
+        checkpoint = scope.get('mode') == 'checkpoint'
+        files = task['current_files'] if current or checkpoint else self.sessions.snapshot(scope['session_id'], scope['repo_after'])['files']
         selected_ids = set(scope['event_ids'])
         events = [e for e in self.sessions.events(scope['session_id']) if e['id'] in selected_ids]
-        signature = {'graph_version': GRAPH_VERSION, 'scope': scope, 'requirements': task['requirements']}
+        signature = {'graph_version': GRAPH_VERSION, 'history_version': 1,
+                     'scope': scope, 'requirements': task['requirements']}
         previous = self.store.latest_view(task_id)
         if previous and previous['signature'] == signature:
             return {'view_id': previous['view_id'], 'files_built': 0, 'reused': True}
         graph, contexts, graph_notes, built = construct_graph(self.store, root, files)
         changes = {} if current else {
             path: 'added' if path not in task['baseline'] else 'deleted' if path not in files else 'modified'
-            for path in sorted(set(files) | set(task['baseline'])) if files.get(path) != task['baseline'].get(path)
+            for path in sorted(set(files) | set(task['baseline']))
+            if files.get(path) != task['baseline'].get(path)
+            and path not in task.get('uncollected_files', {})
+            and path not in task.get('baseline_uncollected_files', {})
         }
+        turns = {e['turn_id']: e['turn'] for e in events if e['kind'] == 'user'}
+        snapshots = [] if current else [
+            {**{key: snap[key] for key in ('snapshot_id', 'turn_id', 'phase', 'files', 'notes')},
+             'turn': turns[snap['turn_id']], 'uncollected_files': snap.get('uncollected_files', {})}
+            for snap in (task['history_snapshots'] if checkpoint else self.sessions.snapshots(scope['session_id']))
+            if snap['turn_id'] in turns
+        ]
         data = {'signature': signature, 'scope': scope, 'files': files, 'baseline': task['baseline'],
+                'history_snapshots': snapshots,
                 'repo_graph': graph, 'contexts': contexts, 'trace_graph': build_trace(events), 'events': events,
                 'requirements': task['requirements'], 'sources': task['sources'], 'changes': changes,
-                'collection_notes': task['collection_notes'], 'graph_notes': graph_notes}
+                'collection_notes': task['collection_notes'], 'graph_notes': graph_notes,
+                'uncollected_files': task.get('uncollected_files', {})}
         return {'view_id': self.store.save_view(task_id, data), 'files_built': built, 'reused': False}
 
     def _requirement_originals(self, requirement: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, list] = {}
         for ref in requirement["refs"]:
-            key = "demand" if ref["kind"] == "user" else "plan"
+            key = {'user': 'demand', 'trace': 'trace', 'repo': 'repo'}.get(ref['kind'], 'plan')
             result.setdefault(key, []).append({"source": ref["source"], "content": ref["content"]})
         return result
 
     def _repo_evidence(self, view: dict[str, Any], requirement: dict[str, Any]) -> list[dict[str, Any]]:
         text = "\n".join(ref["content"] for ref in requirement["refs"])
+        if view['scope'].get('mode') == 'checkpoint':
+            text += '\n' + requirement['check']  # Retrieval hint, never a new requirement.
         files = view["files"]
         paths = {path for path in files if literal_match(text, path, path=True)}
+        anchors = source_line_paths(requirement, view['sources'], list(files))
+        paths.update(anchors)
         graph = view["repo_graph"]
         match_graph = {**graph, "behaviors": [b for b in graph["behaviors"] if not paths or b["path"] in paths]}
         roots = direct_repo_roots(match_graph, text)
@@ -221,6 +281,7 @@ class Harness:
                 candidates = [c for c in view["contexts"] if c["symbol"] == context["symbol"] and (not paths or c["path"] in paths)]
                 if len({c["path"] for c in candidates}) == 1:
                     selected.append({**context, "match": "path + symbol" if context["path"] in paths else "symbol"})
+        selected.extend(value_contexts(view['contexts'], text, paths))
         for path in sorted(paths):
             if not any(item["path"] == path for item in selected):
                 content = self.store.file(files[path])["content"]
@@ -250,28 +311,24 @@ class Harness:
             for context in view["contexts"]:
                 if (context["path"], context["symbol"]) == neighbor:
                     selected.append({**context, "context": relation})
+        selected.extend(enclosing_contexts(selected, view['contexts']))
+        context_refs = {(c['path'], c['symbol'], tuple(c['lines'])): f"{view['view_id']}:context:{index}"
+                        for index, c in enumerate(view['contexts'])}
         result = []
-        seen = {}
-        for context in selected:
-            key = context["path"], context["symbol"], tuple(context["lines"])
-            if key in seen:
-                entry = seen[key]
-                if "context" in context:
-                    existing = entry.get("context", "").splitlines()
-                    if context["context"] not in existing:
-                        entry["context"] = "\n".join([*filter(None, existing), context["context"]])
-                continue
+        for context in compact_contexts(selected):
             first, last = context["lines"]
+            key = context['path'], context['symbol'], tuple(context['lines'])
             entry = {
                 "source": f"{view['scope']['repo_after']}:{context['path']}::{context['symbol']}@{first}-{last}",
                 "content": context["source"],
-                "read_ref": f"{view['view_id']}:repo:{context['path']}",
+                "read_ref": context_refs.get(key, f"{view['view_id']}:repo:{context['path']}"),
             }
             entry.update({key: context[key] for key in ("match", "context") if key in context})
+            if context['path'] in anchors:
+                entry['anchor'] = anchors[context['path']]
             if context["path"] in view["changes"]:
                 entry["change"] = view["changes"][context["path"]]
             result.append(entry)
-            seen[key] = entry
         # Keep changes (including deletions) beside requirements naming that path.
         for path in view['changes']:
             if literal_match(text, path, path=True):
@@ -313,8 +370,6 @@ class Harness:
         notes = []
         if not actual:
             notes.append("本视图已登记的 Repo/Trace 中未匹配到相关证据；不等于未实现或未执行。")
-        if not trace:
-            notes.append("未匹配到执行 Trace，不能仅凭源码确认运行或验证结果。")
         completed = {event["call_id"] for event in events if event["kind"] == "tool_result"}
         pending = [event["id"] for event in events if event["kind"] == "tool_call" and event["call_id"] not in completed]
         if pending:
@@ -332,8 +387,42 @@ class Harness:
         kind, separator, identifier = read_id.partition(":")
         if not separator:
             raise HarnessError("Use a returned material reference.")
+        if kind == 'history' and identifier == 'index':
+            snapshots = view.get('history_snapshots', [])
+            if not snapshots:
+                raise HarnessError('This view has no recorded historical snapshots.')
+            turns = {}
+            for snap in snapshots:
+                entry = turns.setdefault(snap['turn'], {'prompt': f"P{snap['turn']}",
+                    'events': [f"{view_id}:trace:{e['id']}" for e in view['events']
+                               if e['turn'] == snap['turn'] and e['kind'] != 'user']})
+                entry[snap['phase']] = {'snapshot': snap['snapshot_id'],
+                    'read_ref': f"{view_id}:snapshot:{snap['snapshot_id']}"}
+            return list(turns.values())
+        if kind in {'snapshot', 'snapshot_file'}:
+            snapshot_id, _, path = identifier.partition(':')
+            snap = next((s for s in view.get('history_snapshots', [])
+                         if s['snapshot_id'] == snapshot_id), None)
+            if snap is None:
+                raise HarnessError('Snapshot is outside this frozen task; use a returned reference.')
+            uncollected = snap.get('uncollected_files', {})
+            if kind == 'snapshot':
+                return {'source': snapshot_id, 'prompt': f"P{snap['turn']}", 'phase': snap['phase'],
+                        'notes': snap['notes'], 'files': [
+                            {'path': name, **uncollected[name]} if name in uncollected else
+                            {'path': name, 'read_ref': f'{view_id}:snapshot_file:{snapshot_id}:{name}'}
+                            for name in sorted(set(snap['files']) | set(uncollected))]}
+            if path not in snap['files']:
+                raise HarnessError('File content was not collected in this snapshot.')
+            return {'source': f'{snapshot_id}:{path}',
+                    'content': self.store.file(snap['files'][path])['content']}
         if kind == 'files' and identifier == 'index':
-            return [{'path': path, 'read_ref': f'{view_id}:outline:{path}'} for path in sorted(view['files'])]
+            uncollected = view.get('uncollected_files', {})
+            return [
+                {'path': path, **uncollected[path]} if path in uncollected else
+                {'path': path, 'exists': True, 'content_status': 'collected', 'read_ref': f'{view_id}:outline:{path}'}
+                for path in sorted(set(view['files']) | set(uncollected))
+            ]
         if kind == 'outline':
             if identifier not in view['files']:
                 raise HarnessError(f'File not collected in {view_id}: {identifier}')

@@ -23,6 +23,8 @@ def write_integration(output: Path, state_dir: Path, python: str, *, token_budge
              for name in ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop")}
     (output / "hooks.json").write_text(json.dumps({"hooks": hooks}, indent=2), encoding="utf-8")
     target = output / "skills" / "beg-disclose"
-    target.mkdir(parents=True, exist_ok=True)
-    skill = files("codex_harness").joinpath("skills", "beg-disclose", "SKILL.md")
-    (target / "SKILL.md").write_bytes(skill.read_bytes())
+    skill = files("codex_harness").joinpath("skills", "beg-disclose")
+    for relative in ("SKILL.md", "references/tool-workflows.md"):
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(skill.joinpath(relative).read_bytes())

@@ -68,7 +68,8 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     async with ClientSession(reader, writer) as session:
                         await session.initialize()
                         names = {t.name for t in (await session.list_tools()).tools}
-                        self.assertEqual(names, {'beg_list_task_sources', 'beg_select_task', 'beg_build_evidence_groups'})
+                        self.assertEqual(names, {'beg_context', 'beg_evidence', 'beg_list_task_sources',
+                                                 'beg_select_task', 'beg_build_evidence_groups'})
                         async def call(name, arguments):
                             response = await session.call_tool(name, arguments)
                             self.assertFalse(response.isError, response.content)
@@ -89,6 +90,16 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIn('+    return 2', diff['content'])
                         self.assertNotIn('UNRELATED', diff['content'])
                         self.assertEqual(await call('beg_build_evidence_groups', {'task_id': task, 'read_ref': result['read_ref']}), result)
+                        active = await call('beg_context', {'trigger': 'result', 'focus': 'Report app.py behavior'})
+                        check_id = active['check_id']
+                        code.write_text('CHANGED AFTER CHECK', encoding='utf-8')
+                        proof = await call('beg_evidence', {'check_id': check_id, 'question': 'What is in app.py?',
+                            'refs': [{'source_id': 'P1', 'quote': prompt}]})
+                        self.assertIn('questions', proof)
+                        self.assertNotIn('CHANGED AFTER CHECK', str(proof))
+                        done = await call('beg_context', {'check_id': check_id, 'conclusion': 'issue',
+                                                         'summary': 'Current code differs from the reported implementation.'})
+                        self.assertEqual(done['assessment']['conclusion'], 'issue')
 
     def test_hook_cli_stdout_is_json_and_does_not_block_turn(self):
         with ProjectTemporaryDirectory() as root:

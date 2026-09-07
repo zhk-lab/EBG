@@ -114,7 +114,12 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(self.harness.store.task(self.task)['requirements'], previous)
 
     def test_no_fallback_from_generic_demand_to_unrelated_code(self):
-        self.requirements = [{'id': 'R1', 'check': 'Compatibility', 'refs': [{'source_id': 'P1', 'quote': 'retry at most twice'}]}]
+        self.harness.sessions.stop('s', 't1', None)
+        self.harness.sessions.start('s', 't2', str(self.repo), 'Preserve compatibility.')
+        self.harness.sessions.stop('s', 't2', None)
+        self.task = yaml.safe_load(self.harness.select_task('P2', 'P2'))['task_id']
+        self.requirements = [{'id': 'R1', 'check': 'Compatibility of src/retry.py RetryClient.send',
+                              'refs': [{'source_id': 'P2', 'quote': 'compatibility'}]}]
         group = self.build()['evidence_groups']['R1']
         self.assertNotIn('actual', group)
         self.assertIn('note', group)

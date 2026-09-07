@@ -18,4 +18,4 @@ include = ["codex_harness", "codex_harness.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-codex_harness = ["prompts/*.md", "skills/*/SKILL.md"]
+codex_harness = ["prompts/*.md", "skills/*/SKILL.md", "skills/*/references/*.md"]

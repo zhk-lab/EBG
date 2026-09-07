@@ -54,7 +54,7 @@ class SessionLog:
     def prompts(self, session_id: str) -> list[dict[str, Any]]:
         after_turns = {s['turn_id'] for s in self.snapshots(session_id) if s['phase'] == 'after'}
         return [{'id': f"P{e['turn']}", 'content': e['content'], 'complete': e['turn_id'] in after_turns}
-                for e in self.events(session_id) if e['kind'] == 'user']
+                for e in self.events(session_id) if e['kind'] == 'user' and not e.get('internal')]
 
     def plans(self, session_id: str, *, cutoff: int | None = None,
               last_turn: int | None = None) -> list[dict[str, Any]]:
@@ -115,7 +115,7 @@ class SessionLog:
         with self.store.connect() as db:
             return db.execute("SELECT COALESCE(MAX(seq),0) FROM recorded_events WHERE session_id=?", (session_id,)).fetchone()[0]
 
-    def start(self, session_id: str, turn_id: str, repo_path: str, prompt: str) -> dict[str, Any]:
+    def start(self, session_id: str, turn_id: str, repo_path: str, prompt: str, *, internal: bool = False) -> dict[str, Any]:
         self.store.activate_session(session_id)
         root = Path(repo_path).resolve()
         existing = self.turn(session_id, turn_id)
@@ -125,7 +125,7 @@ class SessionLog:
                 raise HarnessError("Prompt replay differs from its recorded turn.")
             return existing
         observed_cutoff = self._cutoff(session_id)
-        files, notes = capture(self.store, root, max_file_bytes=self.max_file_bytes, session_id=session_id)
+        files, notes, uncollected = capture(self.store, root, max_file_bytes=self.max_file_bytes, session_id=session_id)
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             active = db.execute("SELECT id FROM active_session WHERE singleton=1").fetchone()
@@ -142,10 +142,12 @@ class SessionLog:
             if cutoff != observed_cutoff:
                 raise HarnessError("Events changed during before capture; retry the prompt hook.")
             seq = db.execute("INSERT INTO recorded_events(session_id,turn_id,event_key,data) VALUES (?,?,?,?)",
-                             (session_id, turn_id, 'prompt', dumps({'kind': 'user', 'turn': number, 'content': prompt}))).lastrowid
+                             (session_id, turn_id, 'prompt', dumps({'kind': 'user', 'turn': number, 'content': prompt,
+                                                                  **({'internal': True} if internal else {})}))).lastrowid
             db.execute("INSERT INTO recorded_turns VALUES (?,?,?,?)", (session_id, turn_id, number, seq))
             db.execute("INSERT INTO snapshots(session_id,turn_id,phase,event_cutoff,data) VALUES (?,?,?,?,?)",
-                       (session_id, turn_id, 'before', cutoff, dumps({'files': files, 'notes': notes})))
+                       (session_id, turn_id, 'before', cutoff,
+                        dumps({'files': files, 'notes': notes, 'uncollected_files': uncollected})))
         return self.turn(session_id, turn_id)
 
     def append(self, session_id: str, turn_id: str, event: dict[str, Any], key: str) -> None:
@@ -174,7 +176,7 @@ class SessionLog:
         if not latest or latest['turn_id'] != turn_id:
             raise HarnessError("Cannot capture an old turn after a newer prompt; historical after snapshot is missing.")
         observed_cutoff = self._cutoff(session_id)
-        files, notes = capture(self.store, self.root(session_id), max_file_bytes=self.max_file_bytes, session_id=session_id)
+        files, notes, uncollected = capture(self.store, self.root(session_id), max_file_bytes=self.max_file_bytes, session_id=session_id)
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             newest = db.execute("SELECT turn_id FROM recorded_turns WHERE session_id=? ORDER BY number DESC LIMIT 1", (session_id,)).fetchone()[0]
@@ -190,7 +192,8 @@ class SessionLog:
                            (session_id, turn_id, 'response', dumps({'kind': 'assistant', 'turn': latest['number'], 'content': response})))
             cutoff = db.execute("SELECT MAX(seq) FROM recorded_events WHERE session_id=?", (session_id,)).fetchone()[0]
             db.execute("INSERT INTO snapshots(session_id,turn_id,phase,event_cutoff,data) VALUES (?,?,?,?,?)",
-                       (session_id, turn_id, 'after', cutoff, dumps({'files': files, 'notes': notes})))
+                       (session_id, turn_id, 'after', cutoff,
+                        dumps({'files': files, 'notes': notes, 'uncollected_files': uncollected})))
 
     def timeline(self, session_id: str, offset: int = 0, limit: int = 20,
                  prompt_id: str | None = None) -> dict[str, Any]:
@@ -245,12 +248,17 @@ class SessionLog:
             if not snapshot_id:
                 raise HarnessError("Provide event_id or snapshot_id.")
             snap = self.snapshot(session_id, snapshot_id)
+            uncollected = snap.get('uncollected_files', {})
             if path is None:
-                names = sorted(snap['files'])
-                result = {'snapshot_id': snapshot_id, 'files': names[offset:offset + min(limit, 100)], 'total': len(names), 'notes': snap['notes']}
+                names = sorted(set(snap['files']) | set(uncollected))
+                page = names[offset:offset + min(limit, 100)]
+                result = {'snapshot_id': snapshot_id, 'files': page, 'total': len(names), 'notes': snap['notes'],
+                          'uncollected_files': {name: uncollected[name] for name in page if name in uncollected}}
                 if offset + min(limit, 100) < len(names):
                     result['next_offset'] = offset + min(limit, 100)
                 return result
+            if path in uncollected:
+                return {'snapshot_id': snapshot_id, 'path': path, **uncollected[path]}
             if path not in snap['files']:
                 raise HarnessError("File was not collected in this snapshot.")
             content = self.store.file(snap['files'][path])['content']
