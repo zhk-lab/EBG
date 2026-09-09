@@ -497,21 +497,74 @@ FeedbackTrace 不使用 Repo AgentLoop。Raw Trace baseline 一次读取完整�
 Trace 图必须保留每个 Behavior 内的全部原事件及原顺序；没有形成 Behavior 的孤立用户事件不进入模型图。Behavior 通过 `task_id` 归入 Task Scope，并按 `sequence_index` 恢复顺序；`informs/supersedes` 只表达有原始 Evidence 支撑的跨任务信息传递或替换。
 
 
-### Repo：当前冻结配置
+### 当前实验配置（Repo / Trace）
 
-| 配置 | 值 |
-|---|---:|
-| SpecGap 最大轮数，包含 finish | 8 |
-| SilentSwap 最大轮数，包含 finish | 6 |
-| SpecGap Luna reasoning | `none`，Raw/BEG 相同 |
-| SilentSwap Luna reasoning | `none`，Raw/BEG 相同 |
-| 初始目录预算 | 3072 token |
-| search 最大返回 | 12 |
-| 单次 read 最大 ID 数 | 6 |
-| 普通工具结果预算 | 32768 token |
-| 单个完整原子单元上限 | 65536 token |
-| completion 输出上限 | 32768 token |
-| 工作上下文压缩阈值/目标 | 131072 / 98304 token |
-| 网络重试/格式修正 | 最多 2 / 2 次 |
+以下为当前代码与 `.env` 的配置快照。Baseline（`raw`）与 BEG（`graph`）共用模型、思考参数和同一 benchmark 的运行预算。
 
-上下文达到 131072 token 才启动压缩，目标为 98304 token。压缩只删除已被后续 read 完整消费或已重复的旧 search 结果，以及已有完整副本的重复源码；完整任务文档、所有唯一 Local Graph、Evidence 行和当前运行状态始终保留，必要时允许高于目标值。
+**模型配置**
+
+当前被测模型：`BEG_MODEL_PROFILE=GPT_LUNA`；当前评分模型：`JUDGE_MODEL_PROFILE=QWEN`。
+
+| Profile | 模型 ID | 发给模型的思考参数 |
+|---|---|---|
+| `GPT_LUNA` | `gpt-5-6-luna` | `reasoning_effort="none"` |
+| `GPT_TERRA` | `gpt-5-6-terra` | `reasoning_effort="none"` |
+| `GPT_SOL` | `gpt-5-6-sol` | `reasoning_effort="none"` |
+| `DEEPSEEK_FLASH` | `deepseek-v4-flash` | `thinking={"type":"disabled"}` |
+| `DEEPSEEK_PRO` | `deepseek-v4-pro` | `thinking={"type":"disabled"}` |
+| `GLM` | `glm-5-2` | `thinking={"type":"disabled"}` |
+| `QWEN` | `qwen3.7-max-2026-06-08` | `enable_thinking=false` |
+| `CLAUDE` | `claude-sonnet-5` | `thinking={"type":"disabled"}` |
+| `KIMI` | `kimi-k3` | `reasoning_effort="low"` |
+
+Kimi 的 `THINKING_MODE=required` 是本地校验标记，不传给 API。当前所有 Profile 均未设置 `temperature`、`top_p`，采用服务端默认值。
+
+切换模型可修改 `.env` 的两个 Profile 选择项，也可给 `predict.py` / `judge.py` 传 `--model-profile <PROFILE>`。参数优先级为命令行 > 对应角色的 `BEG_` / `JUDGE_` 配置 > Profile；`--show-config` 可查看实际生效配置，不发起模型请求。
+
+**Repo AgentLoop 与 Trace Runner**
+
+| 配置 | Repo：SpecGap / SilentSwap | Trace：FeedbackTrace |
+|---|---|---|
+| 调用方式 | 多轮 `search` / `read` / `finish` | 一次性输入完整 Raw Trace / Task Scope JSON |
+| 最大轮数，包含 finish | SpecGap 8；SilentSwap 6 | 1 次，无工具调用 |
+| 初始目录预算 | 3072 token | 不适用 |
+| search 限制 | 最多返回 12 条；查询最长 512 字符 | 不适用 |
+| 单次 read 最大 ID 数 | 6 | 不适用 |
+| 普通工具结果 / 单个完整原子单元上限 | 32768 / 65536 token | 不适用 |
+| 每次请求输出上限 | 32768 token | 32768 token |
+| 本地上下文预算 / 安全余量 | 1000000 / 32768 token | 1000000 / 32768 token |
+| 输入硬上限（扣除输出与安全余量） | 934464 token | 934464 token |
+| 工作上下文压缩阈值 / 目标 | 131072 / 98304 token | 不压缩、不截断；超限报错 |
+| 网络重试 | 每次请求最多额外重试 2 次 | 每次请求最多额外重试 2 次 |
+| 输出格式修正 | 每次完整运行：SpecGap 最多 2 次；SilentSwap 最多 1 次 | 无 |
+| 引用校验 | 引用范围须由已读取代码覆盖；允许跨过原始源码中确认的空白行，不允许跨过未展示的代码或注释；baseline 和 BEG 共用规则 | 引用须来自输入中的证据 ID |
+
+上下文使用 `utf8_bytes_div3_v1` 估算；初始目录使用 `o200k_base` 计数。表中上下文数值是程序配置的预算，并非各模型服务端窗口的声明。
+
+Repo 达到压缩阈值或服务端拒绝上下文长度时触发压缩：清理已消费或重复的旧 search 结果、已有完整副本的重复读取内容，保留完整任务文档和唯一证据。必要时可高于压缩目标，但不能超过输入硬上限。
+
+**全量运行与 Judge**
+
+| 配置 | 当前值 |
+|---|---|
+| 默认范围 | `full`，三个 benchmark，`raw` + `graph`；当前各 100 个样本，共 600 份预测 |
+| 预测 / Judge 并发 | 2 / 3 |
+| 请求超时 | 600 秒 |
+| SilentSwap 自动重测 | 首轮全部结束后，对所有预测失败样本从头重测 1 次（包括格式、引用校验和网络失败）；两组规则一致 |
+| SpecGap 自动重测 | 首轮全部结束后，对预测失败的样本从头补测 1 次；补测仍失败就结束，断点续跑不增加次数；两组规则一致，每次运行仍最多修正格式 2 次 |
+| Repo token 汇总 | 仅统计成功那次完整运行的用量；失败运行的原始记录和实际用量单独保留 |
+| Repo 重测报告 | 首次预测失败数、首次格式失败数、自动重测数、重测成功数、重测后仍失败数 |
+| Judge | 上表 Qwen 配置；同一 benchmark 的两组共用评分规则 |
+| Judge 输出上限 | 32768 token |
+| Judge 重试 | 网络额外重试最多 2 次；JSON 格式修正最多 1 次；新批次失败样本在队尾补评 1 次，已有实验沿用 manifest 中的策略 |
+| 结果目录 | `experiments/<benchmark>/<模型目录>/<baseline或BEG>/`；`--experiment-name` 传相对路径，如 `specgap/gpt5.6/BEG` |
+| 预测结果目录 | 实验目录下 `runs/<input-id>/`；保留样本内的 attempt、请求、响应和状态 |
+| Judge 结果目录 | 实验目录下 `judges/<judge-model>/<input-id>/`；保留评分尝试和补评记录 |
+| 汇总 | 实验根目录唯一的 `summary.json`：`prediction` 保存预测汇总，`judges[模型名]` 保存对应评分汇总 |
+| 续跑 | 同名实验按已完成结果续跑，并校验配置；更换配置使用新实验名 |
+
+`benchmark`、`arm` 和阶段保留在 manifest 中，不再重复放入单组实验的目录路径。历史上同一实验同时运行 raw 和 graph 时，仅额外保留 arm 层以避免同名样本冲突。根目录汇总的 schema_version 为 2，两个阶段更新各自部分；后续预测汇总不会覆盖已保存的 Judge 汇总。
+
+旧目录迁移需在该实验停止写入后执行：`python -m scripts.main.migrate_layout --experiment-name specgap/deepseek_flash/BEG`。加 `--check` 只检查路径和冲突；不指定实验名时处理 `experiments/` 下的全部实验。迁移保留原始答案、响应、分数和断点，合并旧汇总，并更新 Judge 续跑所用的预测路径。
+
+配置入口：`scripts/model_config.py`、`agentloop/config.py`、`tracereview/config.py`；批量默认值见 `scripts/main/predict.py` 与 `scripts/main/judge.py`。

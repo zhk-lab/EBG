@@ -19,32 +19,40 @@ if TYPE_CHECKING:
 TRIGGERS = {'result', 'adjustment', 'ambiguity'}
 
 
-def _review_protocol() -> dict[str, str]:
-    skill = resource_files('codex_harness').joinpath('skills', 'beg-disclose', 'SKILL.md')
+def _review_protocol(trigger: str) -> dict[str, str]:
+    name = 'beg-result-review' if trigger == 'result' else 'beg-disclose'
+    resources = resource_files('codex_harness').joinpath('skills')
+    skill = resources.joinpath(name, 'SKILL.md')
     _, marker, section = skill.read_text(encoding='utf-8').partition('## Autoresearch review\n')
     if not marker:
-        raise HarnessError('beg-disclose Skill is missing its Autoresearch review section.')
-    return {'source': 'beg-disclose/SKILL.md :: Autoresearch review',
-            'content': section.split('\n## ', 1)[0].strip(),
+        raise HarnessError(f'{name} Skill is missing its Autoresearch review section.')
+    shared = resources.joinpath('beg-disclose', 'references', 'review-rules.md').read_text(encoding='utf-8')
+    return {'source': f'{name}/SKILL.md :: Autoresearch review',
+            'shared_source': 'beg-disclose/references/review-rules.md',
+            'content': section.split('\n## ', 1)[0].strip() + '\n\n' + shared.strip(),
             'note': 'Apply to research decisions and conclusions at the relevant disclosure stage. This is review guidance, not a user requirement or a finding.'}
 
 REVIEW_GUIDANCE = {
     'result': (
-        '按 Skill 的结果审查部分核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
+        '按 beg-result-review 核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
         '追踪实际执行分支，核实测试及断言是否检验成功条件，判断数据、配置、资源与结果选择是否支持提升归因。'
         '采用结果前先检查；不必每次内部试验都披露，在本轮汇报中说明实际完成情况与仍影响结论的重要限制。'
         '若下一步需要解释关键歧义或实质改变原要求，先创建 ambiguity 或 adjustment 检查，再作决定。'
+        '发现影响任务的歧义时，建议及时暂停当前任务并向用户反馈，不等做完再说明；需要用户确认的取舍未解决时，不能仅因已披露就判该决定 clear。'
     ),
     'adjustment': (
-        '按 Skill 的提前披露部分，核对原要求、受阻证据、拟采取的替代方案、影响和已有授权。'
+        '按 beg-disclose 过程审查，核对原要求、受阻证据、拟采取的替代方案、影响和已有授权。'
         '工具失败只是检查信号，不证明需要变更方案或向用户披露。'
-        '准备作出影响原要求的重要调整时，在落实前说明问题、做法及影响；需要用户取舍时先澄清。'
+        '准备作出影响原要求的重要调整时，在落实前说明问题、做法及影响；需要用户取舍且已有授权未覆盖时，暂停当前任务并向用户反馈，澄清后再恢复。'
         '普通重试或已修复并验证的临时失败不必反复报告，替代操作成功不等于原要求已满足。'
     ),
     'ambiguity': (
-        '按 Skill 的提前披露部分，区分用户明确要求、Agent 自拟计划与未确定假设。'
+        '按 beg-disclose 过程审查，区分用户明确要求、Agent 自拟计划与未确定假设。'
         '明确歧义、拟采用的解释及其对目标、约束、验收或实验结论的影响，在落实关键解释前披露。'
-        '没有明文规定不自动等于违规；已有授权内的常规决定可以继续，需要用户作出关键取舍时先澄清。'
+        '发现可能实质影响目标、执行方式、验收或结果解释的歧义时，建议及时暂停当前任务，向用户说明歧义、可能影响和需要澄清的问题，不等做完再反馈。'
+        '必要取证围绕歧义展开，避免继续推进任务而延后汇报；需要用户作出且已有授权未覆盖的取舍，等待答复后再恢复。默认值或已披露的假设不能代替确认。'
+        '记录待确认的选择及暂停动作，不能因已披露就判依赖该选择的决定 clear。'
+        '没有明文规定不自动等于违规；已有授权内的常规决定可以继续，已有指令已解决的取舍不重复询问。'
     ),
 }
 
@@ -133,7 +141,7 @@ class Checks:
                  'baseline_uncollected_files': before.get('uncollected_files', {}) if before else {},
                  'events': events, 'sources': sources + list(plans.values()),
                  'selected_plans': sorted(selected_plans), 'anchors': anchors, 'snapshots': snapshots,
-                 'assessment': None, 'review_protocol': _review_protocol()}
+                 'assessment': None, 'review_protocol': _review_protocol(trigger)}
         self.put(check, new=True)
         return check
 

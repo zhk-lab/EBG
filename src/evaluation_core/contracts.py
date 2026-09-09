@@ -114,6 +114,7 @@ class RepoPredictionContract:
         schema: dict[str, Any],
         *,
         grounding_profile: str | None = None,
+        source_texts: dict[str, str] | None = None,
     ) -> None:
         if benchmark not in GROUNDING_PROFILES:
             raise PredictionError(f"unsupported Repo benchmark: {benchmark!r}")
@@ -129,6 +130,7 @@ class RepoPredictionContract:
         self._benchmark = benchmark
         self._schema = normalized_schema
         self._grounding_profile = profile
+        self._source_texts = dict(source_texts or {})
 
     @property
     def prediction_schema(self) -> dict[str, Any]:
@@ -157,6 +159,7 @@ class RepoPredictionContract:
             schema=self._schema,
             observed_spans=observed_spans,
             grounding_profile=self._grounding_profile,
+            source_texts=self._source_texts,
         )
 
 
@@ -168,6 +171,7 @@ def validate_repo_prediction(
     schema: dict[str, Any],
     observed_spans: Iterable[EvidenceSpan],
     grounding_profile: str | None = None,
+    source_texts: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Validate the formal result and ground every reported source range."""
 
@@ -201,6 +205,7 @@ def validate_repo_prediction(
                         },
                     ),
                     observed_spans=spans,
+                    source_texts=source_texts,
                 )
     else:
         for swap in wrapped["swaps"]:
@@ -209,6 +214,7 @@ def validate_repo_prediction(
                 path=target["file"],
                 ranges=target["line_ranges"],
                 observed_spans=spans,
+                source_texts=source_texts,
             )
     return wrapped
 
@@ -314,6 +320,7 @@ def _validate_location(
     path: str,
     ranges: Iterable[dict[str, Any]],
     observed_spans: tuple[EvidenceSpan, ...],
+    source_texts: dict[str, str] | None = None,
 ) -> None:
     """Enforce shared path/range exposure; the scorer judges symbol accuracy."""
 
@@ -325,7 +332,8 @@ def _validate_location(
             raise PredictionFormatError(
                 f"invalid line range {normalized}:{start}-{end}"
             )
-        if not _observed_range_contains(observed_spans, normalized, start, end):
+        source_text = (source_texts or {}).get(normalized)
+        if not _observed_range_contains(observed_spans, normalized, start, end, source_text):
             raise PredictionGroundingError(
                 "prediction location was not shown by a successful read: "
                 f"{normalized}:{start}-{end}"
@@ -337,8 +345,9 @@ def _observed_range_contains(
     path: str,
     start: int,
     end: int,
+    source_text: str | None = None,
 ) -> bool:
-    """Return true when contiguous read chunks jointly cover the cited range."""
+    """Cover the citation with read chunks, allowing verified blank gaps between them."""
 
     cursor = start
     for span in sorted(
@@ -348,7 +357,13 @@ def _observed_range_contains(
         if span.end < cursor:
             continue
         if span.start > cursor:
-            return False
+            if cursor == start or source_text is None:
+                return False
+            lines = source_text.splitlines()
+            if span.start - 1 > len(lines) or any(
+                line.strip() for line in lines[cursor - 1 : span.start - 1]
+            ):
+                return False
         cursor = max(cursor, span.end + 1)
         if cursor > end:
             return True

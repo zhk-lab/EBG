@@ -207,7 +207,12 @@ def _build_repo_directory(
         )
 
     direct = [item for item in files if item.sections]
-    direct_order = _round_robin_sections(direct)
+    if bundle.benchmark == "silentswap":
+        from .silentswap_directory import rank_files
+
+        direct_order = rank_files(direct)
+    else:
+        direct_order = _round_robin_sections(direct)
     direct_paths = {item.path for item in direct}
     neighbor_paths = _neighbor_paths(graph["edges"], direct_paths)
     neighbors = sorted(
@@ -666,6 +671,18 @@ def _matched_section_orders(
             )
             result.add(section.order)
     return result
+
+
+def document_section_bodies(document: str) -> dict[str, str]:
+    """Return original section bodies using the same boundaries as root alignment."""
+    bodies: dict[str, list[str]] = defaultdict(list)
+    for section in _document_sections(document):
+        body = document[section.start:section.end]
+        if section.level:
+            body = body.partition("\n")[2]
+        if body.strip():
+            bodies[section.title].append(body.strip())
+    return {title: "\n\n".join(parts) for title, parts in bodies.items()}
 
 
 def _document_sections(document: str) -> list[_Section]:

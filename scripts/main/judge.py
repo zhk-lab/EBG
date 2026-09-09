@@ -9,7 +9,7 @@ import os
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -27,6 +27,7 @@ from agentloop.provider import (
     OpenAICompatibleJsonClient,
 )
 from scripts.main.predict import ARMS, BENCHMARKS, PHASES, load_split
+from scripts.main.layout import sample_directory, update_summary
 from scripts.model_config import (
     add_model_arguments,
     apply_model_settings,
@@ -105,6 +106,7 @@ class JudgeBatchConfig:
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     artifact_root: Path = PROJECT_ROOT / "evaluation"
     request_options: dict[str, Any] | None = None
+    deferred_retries: int = 1
 
     @property
     def output_root(self) -> Path:
@@ -112,13 +114,7 @@ class JudgeBatchConfig:
 
     @property
     def judge_root(self) -> Path:
-        return (
-            self.output_root
-            / "judges"
-            / self.phase
-            / JUDGE_PROFILE
-            / self.judge_model
-        )
+        return self.output_root / "judges" / self.judge_model
 
     def validate(self) -> None:
         if not self.experiment_name.strip():
@@ -139,6 +135,8 @@ class JudgeBatchConfig:
             raise BatchJudgeError("network_retries must be non-negative")
         if self.format_repairs not in {0, 1}:
             raise BatchJudgeError("format_repairs must be zero or one")
+        if self.deferred_retries not in {0, 1}:
+            raise BatchJudgeError("deferred_retries must be zero or one")
         if self.timeout <= 0 or self.max_output_tokens <= 0:
             raise BatchJudgeError("timeout and max_output_tokens must be positive")
 
@@ -152,6 +150,12 @@ def run_batch_judges(
     """Judge every selected saved prediction and write a zero-filled summary."""
 
     config.validate()
+    saved_manifest = config.judge_root / "manifest.json"
+    if saved_manifest.is_file():
+        # Existing experiments retain their frozen retry policy.
+        policy = _read_json(saved_manifest)["retry_policy"]
+        config = replace(config, deferred_retries=policy["complete_sample_reruns"])
+        config.validate()
     prediction_manifest = _load_prediction_manifest(config)
     selected_ids = _selected_ids(config, prediction_manifest)
     judge_manifest = _build_manifest(config, prediction_manifest, selected_ids)
@@ -185,6 +189,27 @@ def run_batch_judges(
             results.append(result)
             emit({"event": "judge_sample_finished", **result})
 
+        if config.deferred_retries:
+            retry_results = [item for item in results if _needs_deferred_retry(config, item)]
+            if retry_results:
+                emit({"event": "judge_retry_batch_started", "samples": len(retry_results)})
+                futures = {
+                    executor.submit(
+                        _run_deferred_retry, config, item,
+                        modules[item["benchmark"]], make_client,
+                    ): (item["benchmark"], item["arm"], item["input_id"])
+                    for item in retry_results
+                }
+                replacements = {}
+                for future in as_completed(futures):
+                    result = future.result()
+                    replacements[futures[future]] = result
+                    emit({"event": "judge_sample_retried", **result})
+                results = [
+                    replacements.get((r["benchmark"], r["arm"], r["input_id"]), r)
+                    for r in results
+                ]
+
     results.sort(key=lambda item: (item["benchmark"], item["arm"], item["input_id"]))
     summary = {
         "schema_version": 1,
@@ -198,8 +223,49 @@ def run_batch_judges(
         "totals": _aggregate_totals(results),
         "groups": _aggregate_groups(results),
     }
-    _write_json(config.judge_root / "summary.json", summary)
+    update_summary(config.output_root, judge_model=config.judge_model, judgment=summary)
+    emit({"event": "judge_batch_finished", **summary["totals"]})
     return summary
+
+
+def _needs_deferred_retry(config: JudgeBatchConfig, result: dict[str, Any]) -> bool:
+    root = sample_directory(config.output_root, f"judges/{config.judge_model}", result["arm"], result["input_id"])
+    if result["status"] == "complete":
+        return (root / "retry_1/status.json").is_file()
+    # Missing predictions and invalid local inputs require a fix, not a model rerun.
+    return str(result.get("failure", "")).startswith((
+        "JudgeNetworkRetriesExhausted:", "JudgeResponseFormatError:",
+        "JudgeContentValidationError:",
+    ))
+
+
+def _run_deferred_retry(
+    config: JudgeBatchConfig, initial: dict[str, Any],
+    judge: ModuleType, client_factory: Callable[[], ModelClient],
+) -> dict[str, Any]:
+    benchmark, arm, input_id = initial["benchmark"], initial["arm"], initial["input_id"]
+    root = sample_directory(config.output_root, f"judges/{config.judge_model}", arm, input_id)
+    retry_root = root / "retry_1"
+    # Freeze the first failure before attempting the one permitted rerun.
+    first_path = retry_root / "initial_failure.json"
+    if not first_path.is_file():
+        _write_json(first_path, initial)
+    first = _read_json(first_path)
+    status_path = retry_root / "status.json"
+    if status_path.is_file():
+        result = {**_read_json(status_path), "resumed": True}
+    else:
+        result = _run_job(
+            config, benchmark, arm, input_id, judge, client_factory,
+            sample_root=retry_root,
+        )
+    if result["status"] == "complete":
+        _write_json(root / "result.json", _read_json(retry_root / "result.json"))
+    result.update(
+        auto_retried=True, initial_failure=first["failure"], usage=_attempt_usage(root),
+    )
+    _write_json(root / "status.json", result)
+    return result
 
 
 def _run_job(
@@ -209,17 +275,11 @@ def _run_job(
     input_id: str,
     judge: ModuleType,
     client_factory: Callable[[], ModelClient],
+    *,
+    sample_root: Path | None = None,
 ) -> dict[str, Any]:
-    sample_root = config.judge_root / benchmark / arm / input_id
-    prediction_path = (
-        config.output_root
-        / "runs"
-        / config.phase
-        / benchmark
-        / arm
-        / input_id
-        / "prediction.json"
-    )
+    sample_root = sample_root or sample_directory(config.output_root, f"judges/{config.judge_model}", arm, input_id)
+    prediction_path = sample_directory(config.output_root, "runs", arm, input_id) / "prediction.json"
     try:
         prediction = _read_json(prediction_path)
         if prediction.get("input_id") != input_id:
@@ -767,6 +827,12 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
         "failed_samples": len(results) - len(completed),
         "completion_rate": round(len(completed) / len(results), 6) if results else 0.0,
         "usage": _sum_usage(results),
+        "automatic_retries": {
+            "initial_failures": sum(r["status"] == "failed" or bool(r.get("auto_retried")) for r in results),
+            "retried": sum(bool(r.get("auto_retried")) for r in results),
+            "recovered": sum(bool(r.get("auto_retried")) and r["status"] == "complete" for r in results),
+            "failed_after_retry": sum(bool(r.get("auto_retried")) and r["status"] == "failed" for r in results),
+        },
     }
 
 
@@ -780,7 +846,9 @@ def _sum_usage(results: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 
 def _attempt_usage(sample_root: Path) -> dict[str, int]:
     totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-    for path in sorted((sample_root / "attempts").glob("*.json")):
+    paths = list((sample_root / "attempts").glob("*.json"))
+    paths.extend((sample_root / "retry_1/attempts").glob("*.json"))
+    for path in sorted(paths):
         value = _read_json(path)
         if value.get("provider_called") is not True:
             continue
@@ -882,7 +950,7 @@ def _build_manifest(
             "max_http_attempts_per_request": config.network_retries + 1,
             "json_format_repairs": config.format_repairs,
             "content_validation_retries": 0,
-            "complete_sample_reruns": 0,
+            "complete_sample_reruns": config.deferred_retries,
         },
         "max_output_tokens": config.max_output_tokens,
         "workers": config.workers,
@@ -1124,7 +1192,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--experiment-root",
         type=Path,
-        default=PROJECT_ROOT / "evaluation" / "experiments",
+        default=PROJECT_ROOT / "experiments",
     )
     parser.add_argument("--phase", default="full", choices=PHASES)
     parser.add_argument("--benchmark", action="append", choices=BENCHMARKS)

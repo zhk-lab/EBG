@@ -115,6 +115,7 @@ class RepoBenchmarkConfig:
         task_document: str,
         initial_index: str,
         prompt_variant: PromptVariant = "BEG",
+        source_texts: dict[str, str] | None = None,
     ) -> BoundModule7:
         """Bind an overrideable schema and construct one frozen run input."""
 
@@ -127,6 +128,7 @@ class RepoBenchmarkConfig:
             self.benchmark,
             schema,
             grounding_profile=self.grounding_profile,
+            source_texts=source_texts,
         )
         prompt = build_repo_initial_user_prompt(
             input_id=input_id,

@@ -1,6 +1,6 @@
 Your task is SpecGap recovery. The TASK DOCUMENT contains the complete
-`document_after`: an otherwise largely complete task document from which a small number
-of externally meaningful implemented rules may have been removed. Compare it with the
+`document_after`: an otherwise largely complete task document from which 2–5
+externally meaningful implemented rules have been removed. Compare it with the
 current production implementation and report only material contracts that the document
 no longer states or clearly implies.
 
@@ -38,10 +38,17 @@ INPUT AND GRAPH FORMAT
 REVIEW WORKFLOW AND PROOF STANDARD
 
 Start with the smallest set of top-ranked files whose names and related sections most
-directly correspond to concrete document rules. Use one focused batch read. Request
-another search or read only for a named unresolved rule; directory entries are options,
-not a checklist, and the read limit is not a target. Review every returned source block
-before finish because one read may prove several independent omissions.
+directly correspond to concrete document rules. Use one focused batch read. Directory
+entries are options, not a checklist, and the read limit is not a target. Review every
+returned source block before finish because one read may prove several independent
+omissions.
+
+MANDATORY MINIMUM: Before finishing, identify at least two distinct, materially
+important omissions supported by explicit code evidence. The final `findings` array
+MUST contain at least 2 items. Returning 0 or 1 finding is unacceptable, including in
+the final round. If fewer than two are supported, re-examine all previously read code
+and inspect additional relevant code. Plan your remaining rounds to meet this minimum
+before the final round; do not finish after finding only one omission.
 
 For each candidate:
 
@@ -62,8 +69,10 @@ For each candidate:
 
 Reject documented or clearly implied rules, private implementation preferences without
 material external effect, vague possibilities without a concrete implementation, and
-claims supported only by directory rows, search hits, Behavior labels, or edges. An
-empty `findings` array is correct when no material omission is supported.
+claims supported only by directory rows, search hits, Behavior labels, or edges. Do not
+invent findings, duplicate the same rule, or split one rule merely to reach the minimum
+count. The minimum requires two independently supported omissions; it does not relax
+the evidence standard. There is no final-round exception to the minimum of 2 findings.
 
 OUTPUT CONTRACT
 
@@ -94,8 +103,9 @@ Use exactly this object inside the finish action:
 
 Do not add fields outside this shape.
 
-- `findings`: all supported material omissions, ordered by importance and confidence;
-  there is no target count.
+- `findings`: at least two distinct, evidence-supported material omissions, plus any
+  additional omissions that meet the same standard, ordered by importance and
+  confidence. This minimum is mandatory in every finish response.
 - `finding_id`: a unique answer-local ID such as `F001`; it is unrelated to a
   repository Read ID such as `F0001`.
 - `claim`: one precise missing rule, preferably condition -> result when applicable.

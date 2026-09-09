@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Sequence
 from urllib.parse import urlsplit
@@ -36,6 +36,7 @@ from evaluation_core.messages import (
     load_task_prompt,
 )
 from scripts.main.prepare import token_counter, validate_directory_artifact
+from scripts.main.layout import sample_directory, update_summary
 from scripts.model_config import (
     add_model_arguments,
     apply_model_settings,
@@ -123,6 +124,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if bundle.task_document is None:
         raise AgentLoopError("Repo benchmark bundle lacks its task document")
     benchmark_config = repo_benchmark_config(args.benchmark)
+    loop_config = (
+        replace(AGENTLOOP_CONFIG, format_repair_attempts=1)
+        if args.benchmark == "silentswap"
+        else AGENTLOOP_CONFIG
+    )
     benchmark_config.validate_for(bundle.benchmark)
     count_directory_tokens = token_counter(DIRECTORY_ENCODING)
     prompt_variant = "baseline" if args.arm == "raw" else "BEG"
@@ -164,11 +170,12 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         task_document=bundle.task_document.content,
         initial_index=backend.initial_index,
         prompt_variant=prompt_variant,
+        source_texts={artifact.path: artifact.content for artifact in bundle.repo_artifacts},
     )
     prepared = prepare_initial_request(
         module7.initial_user_prompt,
         module7.max_rounds,
-        config=AGENTLOOP_CONFIG,
+        config=loop_config,
         priority_groups=backend.priority_groups,
     )
     store.save_request_if_unchanged(
@@ -195,7 +202,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         finish_contract=module7.finish_contract,
         client=client,
         store=store,
-        config=AGENTLOOP_CONFIG,
+        config=loop_config,
     ).run()
     return {
         "status": outcome.status,
@@ -275,6 +282,9 @@ ARMS = ("graph", "raw")
 PHASES = ("development", "formal", "full")
 
 MANIFEST_VERSION = 4
+
+FORMAT_FAILURES = {"finish_format_retries_exhausted", "action_format_retries_exhausted"}
+RETRY_BENCHMARKS = ("specgap", "silentswap")
 
 
 class BatchExperimentError(ValueError):
@@ -412,6 +422,30 @@ def run_batch(
             results.append(result)
             emit({"event": "sample_finished", **result})
 
+        retry_jobs = [
+            (result["benchmark"], result["arm"], result["input_id"])
+            for result in results
+            if not config.prepare_only
+            and result["status"] == "failed"
+            and result["benchmark"] in RETRY_BENCHMARKS
+            and not result.get("auto_retried")
+        ]
+        if retry_jobs:
+            emit({"event": "prediction_retry_batch_started", "samples": len(retry_jobs)})
+            retries = {
+                executor.submit(_run_job, config, job, run_one, emit, attempt=2): job
+                for job in retry_jobs
+            }
+            retried = {}
+            for future in as_completed(retries):
+                result = future.result()
+                retried[retries[future]] = result
+                emit({"event": "sample_retried", **result})
+            results = [
+                retried.get((r["benchmark"], r["arm"], r["input_id"]), r)
+                for r in results
+            ]
+
     results.sort(key=lambda item: (item["benchmark"], item["arm"], item["input_id"]))
     summary = {
         "schema_version": 1,
@@ -422,7 +456,17 @@ def run_batch(
         "totals": _aggregate_results(results),
         "groups": _aggregate_groups(results),
     }
-    _write_json(config.output_root / "summary.json", summary)
+    update_summary(config.output_root, prediction=summary)
+    finished = {"event": "batch_finished", **summary["totals"]}
+    if "automatic_retries" in summary["totals"]:
+        counts = summary["totals"]["automatic_retries"]
+        finished["message"] = (
+            f"首次预测失败 {counts['initial_failures']} 条，"
+            f"已自动重测 {counts['retried']} 条，"
+            f"重测成功 {counts['recovered']} 条，"
+            f"最终仍失败 {summary['totals']['status_counts'].get('failed', 0)} 条。"
+        )
+    emit(finished)
     return summary
 
 
@@ -463,17 +507,28 @@ def _run_job(
     job: tuple[str, str, str],
     run_one: Callable[[argparse.Namespace], dict[str, Any]],
     emit: Callable[[dict[str, Any]], None],
+    *,
+    attempt: int = 1,
 ) -> dict[str, Any]:
     benchmark, arm, input_id = job
-    run_root = (
-        config.output_root / "runs" / config.phase / benchmark / arm / input_id
+    run_root = sample_directory(config.output_root, "runs", arm, input_id)
+    attempt_root = (
+        run_root / f"attempt_{attempt}" if benchmark in RETRY_BENCHMARKS else run_root
     )
+    previous = (
+        _load_json(run_root / "batch_result.json")
+        if benchmark in RETRY_BENCHMARKS and (run_root / "batch_result.json").is_file()
+        else {}
+    )
+    if benchmark in RETRY_BENCHMARKS and attempt == 1 and previous.get("auto_retried"):
+        return previous
     emit(
         {
             "event": "sample_started",
             "benchmark": benchmark,
             "arm": arm,
             "input_id": input_id,
+            "attempt": attempt,
         }
     )
     args = argparse.Namespace(
@@ -481,7 +536,7 @@ def _run_job(
         input_id=input_id,
         arm=arm,
         artifact_root=config.artifact_root / benchmark / "artifacts",
-        output=run_root,
+        output=attempt_root,
         schema_root=config.schema_root,
         base_url=config.base_url,
         model=config.model,
@@ -494,7 +549,7 @@ def _run_job(
         raw_result = run_one(args)
         if not isinstance(raw_result, dict):
             raise BatchExperimentError("single-sample runner returned a non-object")
-        usage = collect_response_usage(run_root)
+        usage = collect_response_usage(attempt_root)
         result = {
             "benchmark": benchmark,
             "arm": arm,
@@ -506,7 +561,7 @@ def _run_job(
         }
     except Exception as error:  # Keep unrelated samples resumable after one failure.
         try:
-            usage = collect_response_usage(run_root)
+            usage = collect_response_usage(attempt_root)
         except Exception as usage_error:
             usage = {
                 "calls": 0,
@@ -524,6 +579,32 @@ def _run_job(
             "failure": f"{type(error).__name__}: {error}",
             "usage": usage,
         }
+    if benchmark in RETRY_BENCHMARKS:
+        result["usage_scope"] = "successful_attempt_only"
+        result["actual_usage"] = dict(result["usage"])
+        result["auto_retried"] = attempt == 2
+        result["initial_failure"] = (
+            result["failure"] or "prediction_failed" if result["status"] == "failed" else None
+        )
+        result["initial_format_failure"] = (
+            result["failure"] if result["failure"] in FORMAT_FAILURES else None
+        )
+        if attempt == 2:
+            result["initial_failure"] = previous.get(
+                "initial_failure", previous.get("initial_format_failure")
+            )
+            result["initial_format_failure"] = previous["initial_format_failure"]
+            first_usage = previous["actual_usage"]
+            result["actual_usage"] = {
+                key: value + first_usage[key]
+                for key, value in result["actual_usage"].items()
+            }
+        if result["status"] != "complete":
+            result["usage"] = {key: 0 for key in result["usage"]}
+        else:
+            prediction_path = attempt_root / "prediction.json"
+            if prediction_path.is_file():
+                _write_json(run_root / "prediction.json", _load_json(prediction_path))
     _write_json(run_root / "batch_result.json", result)
     return result
 
@@ -542,7 +623,7 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
         benchmark: list(split["benchmarks"][benchmark][config.phase])
         for benchmark in config.benchmarks
     }
-    return {
+    manifest = {
         "schema_version": MANIFEST_VERSION,
         "experiment_name": config.experiment_name,
         "split_file": str(config.split_file.resolve()) if config.split_file else None,
@@ -566,6 +647,19 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
         "schema_root": str(config.schema_root.resolve()),
         "single_sample_runner": "scripts.main.predict._run",
     }
+    if "silentswap" in config.benchmarks:
+        manifest["silentswap_retry_policy"] = {
+            "format_repairs_per_attempt": 1,
+            "deferred_prediction_failure_reruns": 1,
+            "usage_scope": "successful_attempt_only",
+        }
+    if "specgap" in config.benchmarks:
+        manifest["specgap_retry_policy"] = {
+            "format_repairs_per_attempt": AGENTLOOP_CONFIG.format_repair_attempts,
+            "deferred_prediction_failure_reruns": 1,
+            "usage_scope": "successful_attempt_only",
+        }
+    return manifest
 
 
 def load_selection(config: BatchConfig) -> dict[str, Any]:
@@ -587,6 +681,21 @@ def _freeze_manifest(path: Path, expected: dict[str, Any]) -> None:
             existing = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise BatchExperimentError(f"cannot load experiment manifest: {path}") from error
+        legacy_policy = {
+            "format_repairs_per_attempt": 1,
+            "deferred_format_failure_reruns": 1,
+            "usage_scope": "successful_attempt_only",
+        }
+        upgraded = dict(existing)
+        if existing.get("silentswap_retry_policy") == legacy_policy:
+            upgraded["silentswap_retry_policy"] = {
+                "format_repairs_per_attempt": 1,
+                "deferred_prediction_failure_reruns": 1,
+                "usage_scope": "successful_attempt_only",
+            }
+        if upgraded == expected and existing != expected:
+            _write_json(path, expected)
+            return
         if existing != expected:
             raise BatchExperimentError(
                 "experiment manifest differs; use a new experiment name"
@@ -607,12 +716,35 @@ def _aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             turns += value
         for key in usage:
             usage[key] += int(result["usage"][key])
-    return {
+    totals = {
         "samples": len(results),
         "status_counts": status_counts,
         "turns": turns,
         "usage": usage,
     }
+    if any(r["benchmark"] in RETRY_BENCHMARKS for r in results):
+        totals["usage_scope"] = "successful_attempt_only_for_repo"
+        totals["automatic_retries"] = {
+            "initial_failures": sum(
+                bool(r.get("initial_failure", r.get("initial_format_failure")))
+                for r in results
+            ),
+            "initial_format_failures": sum(
+                bool(r.get("initial_format_failure")) for r in results
+            ),
+            "retried": sum(bool(r.get("auto_retried")) for r in results),
+            "recovered": sum(
+                bool(r.get("auto_retried"))
+                and r.get("automatic_retry_status", r["status"]) == "complete"
+                for r in results
+            ),
+            "failed_after_retry": sum(
+                bool(r.get("auto_retried"))
+                and r.get("automatic_retry_status", r["status"]) == "failed"
+                for r in results
+            ),
+        }
+    return totals
 
 
 def _aggregate_groups(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -723,7 +855,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--experiment-root",
         type=Path,
-        default=PROJECT_ROOT / "evaluation" / "experiments",
+        default=PROJECT_ROOT / "experiments",
     )
     parser.add_argument(
         "--split-file",

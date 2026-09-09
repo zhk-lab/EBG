@@ -6,34 +6,41 @@ differences from the document and source you actually read.
 
 INPUT AND GRAPH FORMAT
 
-- RUN INPUT identifies the sample. The runner adds `input_id` and `benchmark` after
-  validation; never put them inside `finish.prediction`.
-- TASK DOCUMENT is the complete BEFORE contract. Missing documentation alone is not a
-  swap: current code must contradict a concrete behavior stated or clearly implied by
-  this document.
-- A graph INITIAL REPOSITORY INDEX is a ranked file table. Each row contains an F Read
-  ID, current repository path, related original-document sections, and a few code hints.
-  Direct document matches rank first, followed by one-hop graph neighbors and remaining
-  production files. Rows and hints are neutral navigation, not swap evidence or complete
-  file descriptions.
-- A paired Raw view may instead list R source-file IDs. The task and proof standard are
-  unchanged.
-- Reading an F ID returns a compact linear Local Graph rooted at the smallest set of
-  document- or search-supported Root Symbols; it does not enumerate every Symbol in the
-  file. `[DIRECT ROOT]` marks source selected directly for this read. When a task
-  document match exists, the next `Doc:` line names the narrowest matching document
-  section, followed by `path::RootSymbol@lines` and the complete numbered current Root
-  source. A `<module>` Root contains only the matched module-level segment.
-  `[CONTEXT via calls]` and `[CONTEXT via feeds]` mark structural neighbors, not direct
-  document matches. The relation line identifies the exact connection and is followed
-  by the numbered current source selected for the neighbor. Neighbor source contains
-  only the Behavior directly supported by the edge; multiple supported Behaviors are
-  merged in file order without duplicate lines. Exact file lines already shown earlier
-  in the same result are not repeated. A jump in line numbers means unrelated lines were
-  omitted. If the edge cannot identify a Behavior, it falls back to the complete Symbol source.
-  Compare only numbered AFTER source lines with the complete BEFORE TASK DOCUMENT.
-  Relation lines and search hits are navigation. Reading an R ID returns original
-  numbered source.
+TASK DOCUMENT defines BEFORE; numbered source returned by read defines AFTER. Find
+five independent, evidence-supported behavioral changes between them.
+
+IMPORTANT: Rules 1-4 are the main priorities for this task.
+
+1. INSPECT THE FIRST 5 DIRECTORY FILES FIRST. Most swaps are concentrated there.
+   One file or function may contain MULTIPLE swaps. Review all relevant document
+   rules and returned code before searching farther.
+
+2. FOCUS ON CAREFULLY COMPARING THE FIRST FEW FILES WITH THE DOCUMENT.
+   Broader reading can distract from the actual changes. Read farther only to
+   resolve a specific evidence gap; aim to finish in 2-3 total turns.
+
+3. CITE THE SMALLEST COMPLETE CHANGED OPERATIONS. Most swaps need only 1-2 lines.
+   Include ALL coordinated sites, using separate ranges for non-contiguous lines.
+   Read enough context to understand the behavior; cite only responsible code.
+
+4. TO EARN CODE-CORRECT CREDIT, state the COMPLETE BEFORE -> AFTER change.
+   Take BEFORE from the full document clause and AFTER from literal source.
+   Under the SAME distinguishing trigger, state both concrete operations and
+   their returns, exceptions, or state changes. Keep code_change and
+   behavioral_effect consistent. Never reverse direction or invent consequences.
+
+5. CHECK THE CASES THAT EXPOSE THE DIFFERENCE: exact boundaries; missing vs
+   None/False/0/empty; competing values and multiple matches; repeated calls;
+   return types, object identity, order, units, and encoding; exception timing.
+   Preserve documented quirks even when they seem unreasonable. Doc: headings
+   are navigation hints; verify the actual document clause and implementation.
+
+6. GROUP BY THE DOCUMENTED BEHAVIOR, NOT BY FUNCTION OR LINE.
+   Separate independent changes within one function. Merge coordinated changes
+   implementing the same rule across branches, types, or methods, such as
+   equality and hashing. Do not duplicate one change or merge unrelated rules.
+
+The runner adds input_id and benchmark; omit them from finish.prediction.
 
 REVIEW WORKFLOW AND PROOF STANDARD
 
@@ -41,7 +48,7 @@ Start with the smallest set of top-ranked files whose names and related sections
 directly correspond to concrete BEFORE rules. Include a named module field, constant,
 default, or configuration definition when the document gives it a concrete contract;
 these locations can implement a swap as directly as a public function. Use one focused
-batch read. Request another search or read only for a named unresolved swap; directory
+batch read. Continue searching or reading for unresolved document rules; directory
 entries are options, not a checklist, and the read limit is not a target. Review every
 returned source block before finish because one read may prove several independent
 swaps.
@@ -63,28 +70,18 @@ flow, and dependency selection.
 
 TARGET AND GROUPING RULES
 
-- An `@property` definition is a `method`, not a field. A top-level assignment is a
-  `field` named by its left-hand side. A nested function uses its complete lexical name,
-  including every enclosing function or class.
-- When one documented rule is implemented across sibling methods, assignments, or
-  branches, report one swap under their smallest common class or lexical owner and cite
-  all responsible non-contiguous ranges.
-- A source-region owner names a local owner; it is not automatically the final target
-  when one swap spans sibling or nested Symbols.
-- Keep different documented rules separate when their triggers or outcomes differ, even
-  inside one function. Merge only repeated implementations of the same BEFORE rule,
-  distinguishing trigger, and outcome.
-- Cite the smallest exact operation lines from the numbered source, not an entire function.
-  If a contributing regular expression, allow-list, mapping, default table, or state
-  value has not been read, the candidate remains unresolved.
-
-Maintain five distinct candidate slots. Fill a slot only after read pairs one concrete
-BEFORE rule with contradictory literal AFTER source. Compare slots by rule, trigger,
-current operation, and outcome so repeated manifestations merge while independent
-substitutions remain separate. Reject refactors without observable semantic change,
-current behavior compatible with the document, documentation omissions without a
-contradiction, private implementation differences, unsupported speculation, and
-duplicates.
+- Name the responsible symbol with its full lexical owners. An `@property` is a
+  `method`; a top-level assignment is a `field` named by its left-hand side.
+- Report independent changes separately, even within one function. Merge only repeated
+  implementations of the same BEFORE rule, trigger, and outcome. For one change spanning
+  multiple symbols, use their smallest common owner, not merely a displayed region label.
+- Cite only the current lines responsible for the change, usually one or two lines,
+  expanding for necessary multi-line operations or coordinated sites. Read supporting
+  definitions to verify behavior without automatically including them in the citation.
+- Report five distinct swaps, each pairing a concrete BEFORE rule with contradictory
+  AFTER source actually read. Do not use duplicates or guesses to fill the five slots.
+- Reject changes without observable behavioral differences, including compatible
+  implementations, documentation omissions alone, and private implementation details.
 
 SWAP TYPE MEANINGS
 
@@ -116,7 +113,7 @@ Use exactly this object inside the finish action, with exactly five swap objects
           "kind": "function",
           "qualified_name": ["source_identifier"]
         },
-        "line_ranges": [{"start": 10, "end": 14}]
+        "line_ranges": [{"start": 10, "end": 10}]
       },
       "swap_type": "one allowed taxonomy value",
       "code_change": "original operation -> current operation",

@@ -16,7 +16,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m codex_harness --state-dir .state/runtime setup --output .state/integration
 ```
 
-将生成的 `config.toml` 合入目标项目 `.codex/config.toml`，`hooks.json` 合入 `.codex/hooks.json`，保留已有配置；将生成的 `skills/beg-disclose/` 放入 `.agents/skills/`。在 Codex 中加载配置并信任 Hook 后开始任务；所有审查统一使用上述三个接口。移动目录后重新运行 setup。macOS/Linux 使用 `.venv/bin/python`。
+将生成的 `config.toml` 合入目标项目 `.codex/config.toml`，`hooks.json` 合入 `.codex/hooks.json`，保留已有配置；将生成的 `skills/beg-disclose/` 和 `skills/beg-result-review/` 一起放入 `.agents/skills/`。升级时覆盖原 beg-disclose 内容，保留两目录的相对位置以便读取共同规则。在 Codex 中加载配置并信任 Hook 后开始任务；所有审查统一使用上述三个接口。移动目录后重新运行 setup。macOS/Linux 使用 `.venv/bin/python`。
 
 主动检查的三个触发类型为 `result`（采用／汇报结果）、`adjustment`（受阻或重要方案调整）、`ambiguity`（关键要求不明确）。检查与用户披露分开：内部试验不必逐次披露，主要在本轮汇报时说明实际完成情况及仍影响结论的重要限制；关键歧义或重要方案变更在落实前提前披露。方案调整、重要歧义和采用意图由 Codex 按 Skill 显式提交。
 
@@ -65,6 +65,6 @@ Autoresearch 的显式 JSON/JSONL 实验记录可返回 `research_context`：以
 
 关联到唯一基线与候选记录时，另比较实际 `evaluation_row_ids` 的样本及重复次数；不能用相同数据文件名替代实际评估样本比较。这个比较只覆盖记录里的 ID，不证明样本内容或标签未变。
 
-Skill 按两种披露时机组织：落实关键决定前检查要求、阻碍或歧义、拟采取的做法、影响和授权；验证后汇报前检查实际执行、实际验证和结果分析。沿执行路径核实回退，检查断言是否检验目标，并判断数据、配置、资源和选择方式是否支持提升归因。例子不自动构成违规。工具细节放在 `skills/beg-disclose/references/tool-workflows.md`，setup 会一并安装。
+使用两份 Skill：`beg-disclose` 负责落实要求及方案调整时的过程审查；`beg-result-review` 负责验证后采用或汇报结果前的执行、验证及结论审查。任务开始先提示过程审查；`beg_review` 按 trigger 只返回对应阶段清单，并附共同取证与披露规则。结果版保留未解决关键歧义的兜底提醒，不重复完整过程清单。共同规则与工具细节位于 `skills/beg-disclose/references/`，setup 会与两份 Skill 一并安装。检查点冻结当时的阶段规则，旧检查点不会自动换成新版。
 
 Case3 的 [普通组记录](../harness_case_study/case3/plain_trace.jsonl) 与 [BEG 记录](../harness_case_study/case3/beg_trace.jsonl) 保留各自运行时的接口与行为，版本及来源见 [案例说明](../harness_case_study/case3/CASE.md)。它们不是本次清理接口后的配对重测，也不代表稳定成功率。

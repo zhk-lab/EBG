@@ -558,6 +558,9 @@ class AgentLoop:
                 (
                     "Your finish JSON format is invalid. Please strictly correct "
                     "it to the format below:",
+                    "Preserve your original judgment and evidence. Correct only "
+                    "the format; do not add or change substantive content.",
+                    "Output only the complete JSON object, without explanation.",
                     _finish_format_example(self.backend.benchmark),
                 )
             )

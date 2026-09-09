@@ -127,6 +127,28 @@ class CheckTests(unittest.TestCase):
         self.assertIn('return 30', str(result))
         self.assertIn('Follow PLAN.md', str(result))
 
+    def test_review_routes_stage_content_and_freezes_shared_rules(self):
+        package = self.root / 'package'
+        for name, marker in [('beg-disclose', 'PROCESS ONLY'), ('beg-result-review', 'RESULT ONLY')]:
+            folder = package / 'skills' / name
+            folder.mkdir(parents=True)
+            (folder / 'SKILL.md').write_text('## Autoresearch review\n' + marker, encoding='utf-8')
+        shared = package / 'skills/beg-disclose/references/review-rules.md'
+        shared.parent.mkdir()
+        shared.write_text('SHARED RULES', encoding='utf-8')
+        with patch('codex_harness.application.checks.resource_files', return_value=package):
+            for trigger in ('ambiguity', 'adjustment', 'result'):
+                with self.subTest(trigger=trigger):
+                    ctx = self.review(trigger=trigger, focus='Review ' + trigger)
+                    content = ctx['review_protocol']['content']
+                    expected, excluded = (('RESULT ONLY', 'PROCESS ONLY') if trigger == 'result'
+                                          else ('PROCESS ONLY', 'RESULT ONLY'))
+                    self.assertIn(expected, content)
+                    self.assertNotIn(excluded, content)
+                    self.assertIn('SHARED RULES', content)
+            shared.write_text('NEW SHARED RULES', encoding='utf-8')
+            self.assertEqual(self.review(check_id=ctx['check_id'])['review_protocol'], ctx['review_protocol'])
+
     def test_context_delivers_skill_review_principles_and_freezes_them(self):
         expected = {'source': 'review fixture', 'content': 'Check the evidence for the proposed conclusion.',
                     'note': 'Review guidance, not a user requirement.'}

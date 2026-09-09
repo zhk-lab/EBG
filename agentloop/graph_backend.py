@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable
 
-from beg.behavior_directory import render_ranked_directory
+from beg.behavior_directory import document_section_bodies, render_ranked_directory
 from beg.core.model import VisibleBundle
 from beg.local_graph_retrieval import LocalGraphRetriever, RetrievalError
 from evaluation_core.contracts import EvidenceSpan
@@ -40,6 +40,7 @@ class GraphBackend:
         compact_rendering: bool = True,
         minimal_roots: bool = True,
         expand_neighbors: bool = True,
+        document_quotes: bool = False,
     ) -> None:
         try:
             retriever = LocalGraphRetriever(
@@ -58,6 +59,11 @@ class GraphBackend:
         self.input_id = bundle.input_id
         self.benchmark = bundle.benchmark
         self.compact_rendering = compact_rendering
+        self.document_bodies = (
+            document_section_bodies(bundle.task_document.content)
+            if document_quotes and bundle.task_document is not None
+            else None
+        )
         self.initial_index = render_ranked_directory(directory)
         self.initial_index_tokens = int(directory["token_count"])
         self._retriever = retriever
@@ -97,6 +103,7 @@ class GraphBackend:
                 f"compact_rendering={compact_rendering}",
                 f"minimal_roots={minimal_roots}",
                 f"expand_neighbors={expand_neighbors}",
+                *(["document_quotes=True"] if document_quotes else []),
             ]
         )
 
@@ -247,7 +254,7 @@ class GraphBackend:
                 end=1,
             )
         rendered_source = (
-            _render_compact_local_graph(local_graph)
+            _render_compact_local_graph(local_graph, document_bodies=self.document_bodies)
             if self.compact_rendering
             else json.dumps(local_graph, ensure_ascii=False, indent=2)
         )
@@ -328,7 +335,9 @@ def _numbered_source_regions(source: str) -> tuple[tuple[int, int, str], ...]:
     return tuple(regions)
 
 
-def _render_compact_local_graph(local_graph: dict[str, Any]) -> str:
+def _render_compact_local_graph(
+    local_graph: dict[str, Any], *, document_bodies: dict[str, str] | None = None
+) -> str:
     lines: list[str] = []
     shown_source_lines: set[tuple[str, int]] = set()
     for graph in local_graph["graphs"]:
@@ -341,7 +350,15 @@ def _render_compact_local_graph(local_graph: dict[str, Any]) -> str:
         else:
             document_section = root.get("document_section")
             if document_section:
-                lines.append(f"Doc: {document_section}")
+                body = (document_bodies or {}).get(document_section)
+                if body:
+                    lines.append("Doc (original text):")
+                    lines.extend(
+                        f"> {line}"
+                        for line in _document_quote(body, str(root["symbol"])).splitlines()
+                    )
+                else:
+                    lines.append(f"Doc: {document_section}")
             ranges = _source_range_label(str(root["source"]))
             lines.append(f"{root['path']}::{root['symbol']}@{ranges}")
             source = _deduplicated_source(
@@ -365,6 +382,15 @@ def _render_compact_local_graph(local_graph: dict[str, Any]) -> str:
                     if source:
                         lines.append(source)
     return "\n".join(lines).rstrip()
+
+
+def _document_quote(body: str, symbol: str) -> str:
+    """Select verbatim paragraphs/list items naming the symbol, or the full body."""
+    blocks = re.split(r"\n[ \t]*\n|\n(?=[ \t]*[-*+] )", body)
+    names = [symbol, symbol.rsplit(".", 1)[-1]]
+    pattern = re.compile(r"(?<![\w])(?:" + "|".join(re.escape(n) for n in names) + r")(?![\w])")
+    matching = [block for block in blocks if pattern.search(block)]
+    return "\n\n".join(matching) if matching else body
 
 
 def _compact_relation_name(edge: str) -> str:

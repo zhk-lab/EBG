@@ -49,28 +49,17 @@ flow, and dependency selection.
 
 TARGET AND GROUPING RULES
 
-- An `@property` definition is a `method`, not a field. A top-level assignment is a
-  `field` named by its left-hand side. A nested function uses its complete lexical name,
-  including every enclosing function or class.
-- When one documented rule is implemented across sibling methods, assignments, or
-  branches, report one swap under their smallest common class or lexical owner and cite
-  all responsible non-contiguous ranges.
-- A source-region owner names a local owner; it is not automatically the final target
-  when one swap spans sibling or nested Symbols.
-- Keep different documented rules separate when their triggers or outcomes differ, even
-  inside one function. Merge only repeated implementations of the same BEFORE rule,
-  distinguishing trigger, and outcome.
-- Cite the smallest exact operation lines from the numbered source, not an entire function.
-  If a contributing regular expression, allow-list, mapping, default table, or state
-  value has not been read, the candidate remains unresolved.
-
-Maintain five distinct candidate slots. Fill a slot only after read pairs one concrete
-BEFORE rule with contradictory literal AFTER source. Compare slots by rule, trigger,
-current operation, and outcome so repeated manifestations merge while independent
-substitutions remain separate. Reject refactors without observable semantic change,
-current behavior compatible with the document, documentation omissions without a
-contradiction, private implementation differences, unsupported speculation, and
-duplicates.
+- Name the responsible symbol with its full lexical owners. An `@property` is a
+  `method`; a top-level assignment is a `field` named by its left-hand side.
+- Report independent changes separately, even within one function. Merge only repeated
+  implementations of the same BEFORE rule, trigger, and outcome. For one change spanning
+  multiple symbols, use their smallest common owner, not merely a displayed region label.
+- Cite the smallest necessary numbered source ranges, including all responsible
+  non-contiguous locations. Read any missing supporting definition before accepting a swap.
+- Report five distinct swaps, each pairing a concrete BEFORE rule with contradictory
+  AFTER source actually read. Do not use duplicates or guesses to fill the five slots.
+- Reject changes without observable behavioral differences, including compatible
+  implementations, documentation omissions alone, and private implementation details.
 
 SWAP TYPE MEANINGS
 

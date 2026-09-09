@@ -1,4 +1,4 @@
-"""Strict three-action JSON protocol for the shared evaluation agent."""
+"""Three-action JSON protocol with strict field validation and prose extraction."""
 
 from __future__ import annotations
 
@@ -54,29 +54,34 @@ def parse_action(
     max_read_ids: int,
     max_search_characters: int,
 ) -> AgentAction:
-    """Parse one action, preferring the first when the model emits several."""
+    """Parse an action, accepting prose around a unique embedded JSON action.
+
+    Responses starting with JSON retain the existing first-action policy.
+    """
 
     if not isinstance(content, str) or not content.strip():
         raise ProtocolError("model response is empty")
     stripped = content.strip()
-    if not stripped.startswith(("{", "[")):
-        raise ProtocolError("model response must be one bare JSON object")
     decoder = json.JSONDecoder(
         object_pairs_hook=_strict_object_with_line_range_repair,
         parse_constant=_reject_constant,
     )
     try:
-        value, end = decoder.raw_decode(stripped)
-        trailing = stripped[end:].strip()
-        if isinstance(value, list):
-            if trailing or len(value) < 2 or not all(
-                _looks_like_action(item) for item in value
-            ):
-                raise ValueError("model response must be one bare JSON object")
-            value = value[0]
-        elif trailing and not _contains_later_action(trailing, decoder):
-            raise ValueError("model response contains content after the action object")
+        if stripped.startswith(("{", "[")):
+            value, end = decoder.raw_decode(stripped)
+            if stripped[end:].lstrip().startswith(("}", "]", ",")):
+                raise ValueError("model response contains content after the action object")
+            if isinstance(value, list):
+                if stripped[end:].strip() or len(value) < 2 or not all(
+                    _looks_like_action(item) for item in value
+                ):
+                    raise ValueError("model response must be one bare JSON object")
+                value = value[0]
+        else:
+            value = _extract_embedded_action(stripped, decoder)
         value = _repair_duplicate_line_ranges(value)
+    except ProtocolError:
+        raise
     except (json.JSONDecodeError, ValueError) as error:
         raise ProtocolError(f"model response is not strict JSON: {error}") from error
     if not isinstance(value, dict):
@@ -140,17 +145,24 @@ def _looks_like_action(value: Any) -> bool:
     }
 
 
-def _contains_later_action(text: str, decoder: json.JSONDecoder) -> bool:
-    for index, character in enumerate(text):
-        if character != "{":
-            continue
+def _extract_embedded_action(text: str, decoder: json.JSONDecoder) -> dict[str, Any]:
+    """Skip surrounding prose without mistaking nested objects for extra actions."""
+    candidates = []
+    index = 0
+    while (index := text.find("{", index)) != -1:
         try:
-            value, _ = decoder.raw_decode(text, index)
+            value, end = decoder.raw_decode(text, index)
         except json.JSONDecodeError:
+            index += 1
             continue
         if _looks_like_action(value):
-            return True
-    return False
+            candidates.append(value)
+        index = end
+    if not candidates:
+        raise ProtocolError("model response must be one bare JSON object")
+    if len(candidates) != 1:
+        raise ProtocolError("analysis contains multiple action objects; expected one")
+    return candidates[0]
 
 
 def canonical_action(action: AgentAction) -> str:

@@ -34,9 +34,10 @@ build/
 
 # Generated evaluation data and detailed model traces
 evaluation/*/artifacts/
-evaluation/experiments/**/runs/
-evaluation/experiments/**/judges/
+experiments/**/runs/
+experiments/**/judges/
 
+experiments/
 # Editors and operating systems
 .vscode/
 .idea/

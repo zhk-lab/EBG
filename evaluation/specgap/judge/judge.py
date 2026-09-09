@@ -467,7 +467,12 @@ fix the structure so it follows every rule from the original instructions. In pa
 - matches may use only match_score 0.5 or 1.0;
 - a finding assessed as match_score 0.0 belongs in unmatched_findings, not matches;
 - every candidate finding must appear exactly once across the two arrays;
-- matched findings and matched conditions must remain one-to-one."""
+- matched findings and matched conditions must remain one-to-one;
+- when multiple findings compete for the same condition, keep only the best semantic
+  match for that condition. Put the other findings in unmatched_findings unless they
+  independently match another unused condition. Do not invent condition IDs;
+- before returning, check that condition_id values in matches are unique and that
+  every candidate finding appears exactly once across both arrays."""
 
 
 def finding_evidence(finding: Mapping[str, Any]) -> tuple[CodeRange, ...]:

@@ -1516,6 +1516,7 @@ def _analyze_scope(
         state_effect = _statement_effect(
             statement,
             is_module=isinstance(scope.node, ast.Module),
+            is_class=isinstance(scope.node, ast.ClassDef),
             global_names=global_names,
         )
         if state_effect is not None:
@@ -1862,13 +1863,17 @@ def _statement_effect(
     statement: ast.stmt,
     *,
     is_module: bool,
+    is_class: bool,
     global_names: set[str],
 ) -> str | None:
     if isinstance(statement, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Delete)):
         targets = _assignment_targets(statement)
         if any(
             isinstance(target, (ast.Attribute, ast.Subscript))
-            or (isinstance(target, ast.Name) and (is_module or target.id in global_names))
+            or (
+                isinstance(target, ast.Name)
+                and (is_module or is_class or target.id in global_names)
+            )
             for target in targets
         ):
             return "state_write"

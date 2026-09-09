@@ -138,8 +138,9 @@ def _context(event_name: str, session_id: str, harness: Harness) -> dict[str, An
     reminder = (' 尚未记录结论的检查点（最近三个）：' + '、'.join(pending[-3:])) if pending else ''
     return {'hookSpecificOutput': {
         'hookEventName': event_name,
-        'additionalContext': f'BEG 正在记录 session_id={session_id}。采用或汇报结果前检查；'
-                             '主要在本轮汇报时披露仍影响结论的重要问题，关键歧义或重要方案变更在落实前提前披露。'
+        'additionalContext': f'BEG 正在记录 session_id={session_id}。落实 Prompt/Plan 时先使用 beg-disclose 过程 Skill，核对要求解释及拟采取的做法；'
+                             '验证结束、准备采用或汇报结果时再使用 beg-result-review；beg_review 按 trigger 返回对应阶段内容，无需提前读取另一阶段完整清单。'
+                             '发现影响任务的歧义时，建议及时暂停当前任务并向用户反馈；需要用户作出且已有授权未覆盖的取舍，澄清后再恢复。'
                              '使用 beg_review(trigger=result/adjustment/ambiguity, focus=拟作出的声明或决定)；'
                              '收到检查点编号则直接读取。发现疑点必须调用 beg_evidence，即使尚不确定；核对后用 beg_record 保存 conclusion/summary。'
                              '只披露影响结论或决策的问题，不重复提醒。审查统一使用上述三个接口。' + reminder,
