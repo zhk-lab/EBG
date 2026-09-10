@@ -38,6 +38,7 @@ class CheckTests(unittest.TestCase):
         return yaml.safe_load(self.harness.checks.evidence(**args))
 
     def record(self, **args):
+        self.harness.checks.evidence(args['check_id'], 'What budget does train.py use?')
         return yaml.safe_load(self.harness.checks.record(**args))
 
     def test_inflight_freezes_code_plans_and_trace_and_survives_restart(self):
@@ -129,12 +130,13 @@ class CheckTests(unittest.TestCase):
 
     def test_review_routes_stage_content_and_freezes_shared_rules(self):
         package = self.root / 'package'
-        for name, marker in [('beg-disclose', 'PROCESS ONLY'), ('beg-result-review', 'RESULT ONLY')]:
+        for name, marker in [('beg-ambiguity', 'PROCESS ONLY'), ('beg-adjustment', 'PROCESS ONLY'),
+                             ('beg-result-review', 'RESULT ONLY')]:
             folder = package / 'skills' / name
             folder.mkdir(parents=True)
             (folder / 'SKILL.md').write_text('## Autoresearch review\n' + marker, encoding='utf-8')
-        shared = package / 'skills/beg-disclose/references/review-rules.md'
-        shared.parent.mkdir()
+        shared = package / 'skills/beg-review/references/review-rules.md'
+        shared.parent.mkdir(parents=True)
         shared.write_text('SHARED RULES', encoding='utf-8')
         with patch('codex_harness.application.checks.resource_files', return_value=package):
             for trigger in ('ambiguity', 'adjustment', 'result'):
@@ -205,8 +207,9 @@ class CheckTests(unittest.TestCase):
         result = self.hook('PostToolUse', tool_name='Bash', tool_use_id='fail',
                            tool_input={'command': 'python train.py'}, tool_response={'exit_code': 1})
         self.assertNotIn('decision', result)
-        self.assertIn('beg_review', result['hookSpecificOutput']['additionalContext'])
-        ctx = self.review(check_id=self.harness.checks.all()[-1]['id'])
+        self.assertEqual(result, {})
+        self.assertEqual(self.harness.checks.all(), [])
+        ctx = self.review(trigger='adjustment', focus='Review failure at the end')
         self.assertIn('"exit_code": 1', str(ctx['trace']))
         count = len(self.harness.sessions.events('s'))
         self.hook('PostToolUse', tool_name='mcp__beg_disclose__beg_evidence', tool_use_id='self',
@@ -223,8 +226,9 @@ class CheckTests(unittest.TestCase):
     def test_adoption_assessment_can_cover_identical_final_report(self):
         ctx = self.review(trigger='result', focus='The measured result is ready.')
         self.record(check_id=ctx['check_id'], conclusion='clear', summary='The result matches the recorded conditions.')
-        self.assertEqual(self.hook('Stop', last_assistant_message='The measured result is ready.'), {})
-        self.assertEqual(len(self.harness.checks.all()), 1)
+        self.assertEqual(self.hook('Stop', last_assistant_message='The measured result is ready.')['decision'], 'block')
+        self.assertEqual(len(self.harness.checks.all()), 2)
+        self.assertEqual(self.harness.checks.get(ctx['check_id'])['assessment']['conclusion'], 'clear')
 
     def test_unread_material_and_old_evidence_pages_remain_frozen(self):
         ctx = self.review(trigger='result', focus='Verify train.py')

@@ -22,10 +22,10 @@ class SourceReference(BaseModel):
 def create_server(harness: Harness) -> FastMCP:
     server = FastMCP(
         'beg-disclose', log_level='WARNING',
-        instructions='During execution use beg_review at result adoption/reporting, material plan adjustments '
-        'or important ambiguities. Read a hook check_id or create a checkpoint with trigger/focus. '
+        instructions='Use beg-review for autoresearch. Review ambiguity before executing a Plan; '
+        'at the Stop checkpoint review adjustment then result. Read a hook check_id or create with trigger/focus. '
         'Review provides requirements, execution records and check criteria, without automatic code retrieval. '
-        'For every concern, even an uncertain one, use beg_evidence with a concrete question before judgment. '
+        'Every assessment requires beg_evidence with a concrete question and relevant code/execution evidence. '
         'Use beg_evidence for all active-review read_ref/next expansions, including review pages. '
         'Record the judgment using beg_record; reads alone are not completed checks. '
         'Evidence is not a verdict. Return to ordinary authorized work for new verification or repairs.',
@@ -38,19 +38,28 @@ def create_server(harness: Harness) -> FastMCP:
                    plan_ids: list[str] | None = None) -> str:
         """Read check_id from a hook, or freeze now with trigger/focus and optional recorded event/Plan IDs.
         Returns original Prompts, related call/results, Plan candidates, focus and review criteria; no automatic code retrieval.
-        For any concern, even if uncertain, call beg_evidence with a specific question before judging it.
+        Always call beg_evidence with a specific question before judgment, including apparently clear cases.
         Expand all_trace/all_sources or any read_ref/next using beg_evidence. Older Prompts may concern other tasks.
         Use beg_record after judgment. Reading a checkpoint neither records an assessment nor discloses it to the user.
         """
         return harness.checks.review(check_id, trigger=trigger, focus=focus, event_ids=event_ids, plan_ids=plan_ids)
 
     @server.tool(annotations=local, structured_output=False)
-    def beg_record(check_id: str, conclusion: Literal['clear', 'issue', 'uncertain'], summary: str) -> str:
+    def beg_record(check_id: str | None = None, conclusion: Literal['clear', 'issue', 'uncertain'] | None = None,
+                   summary: str = '', waiting_for_user: bool = False, resolution: str | None = None,
+                   note_kind: Literal['adjustment', 'limitation'] | None = None,
+                   decision_status: Literal['proposed', 'executed'] = 'proposed') -> str:
         """Save the judgment, evidence basis and handling; return a short acknowledgement only.
-        Investigate every concern through beg_evidence first; unresolved essential premises cannot be clear.
+        Call beg_evidence first for every assessment; unresolved essential premises cannot be clear.
+        Set waiting_for_user for a necessary user choice, then immediately ask and end the turn.
+        After a real reply resolves the choice, use the waiting check_id and resolution explaining how.
+        During execution, save an unreviewed process note with note_kind, summary and decision_status only;
+        omit check_id/conclusion. This defers evidence review to Stop and does not authorize an action.
         Records agent judgment, not an independent verdict or proof of user-facing disclosure.
         """
-        return harness.checks.record(check_id, conclusion, summary)
+        return harness.checks.record(check_id, conclusion, summary,
+                                     waiting_for_user=waiting_for_user, resolution=resolution,
+                                     note_kind=note_kind, decision_status=decision_status)
 
     @server.tool(annotations=local, structured_output=False)
     def beg_evidence(check_id: str, question: str | None = None, refs: list[SourceReference] | None = None,

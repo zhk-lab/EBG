@@ -1,17 +1,72 @@
-"""Record execution and surface active checks without replacing tool results."""
+"""Record execution; review Plans after reading and experiments at Stop."""
 
 from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
 from ..application.service import Harness
 from ..application.storage import HarnessError
+from ..application.runtime import runtime, pause, elapsed
+from ..application.repository import capture
 
 
 def _content(value: Any) -> str:
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _context(name: str, message: str) -> dict[str, Any]:
+    return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext': message}}
+
+
+def _execution_plan(prompt: str) -> str | None:
+    """Recognize explicit execution requests only; ambiguous intent stays with the agent."""
+    if re.match(r'\s*(?:please\s+|请)?(?:explain\b|describe\b|review\b|summarize\b|解释|评审|总结|讨论)', prompt, re.I):
+        return None
+    if re.search(r'(?:不要|不必|do not|don.t)\s*(?:执行|implement|execute|follow)', prompt, re.I):
+        return None
+    if not re.search(r'(?:执行|按照|按|落实|\bimplement\b|\bexecute\b|\bfollow\b)[^\n。]{0,100}(?:plan|计划|方案|\.md\b)', prompt, re.I):
+        return None
+    paths = re.findall(r'[\w./\\-]+\.(?:md|markdown)\b', prompt, re.I)
+    return paths[0] if paths else '@context'
+
+
+def _read_plan(tool: str, inputs: Any, plan: str) -> bool:
+    if not isinstance(inputs, dict) or plan == '@context':
+        return False
+    name = tool.rsplit('__', 1)[-1].lower()
+    path = inputs.get('path', inputs.get('file_path', ''))
+    if name in {'read', 'read_file'}:
+        actual, expected = str(path).replace('\\', '/'), plan.replace('\\', '/')
+        return actual == expected or actual.endswith('/' + expected)
+    command = inputs.get('cmd', inputs.get('command', ''))
+    return (isinstance(command, str) and plan.casefold() in command.casefold()
+            and bool(re.search(r'(?:^|[;\n])\s*(?:Get-Content|cat|type|head|sed)\b', command, re.I)))
+
+
+def _plan_check(harness: Harness, plan: str, event_ids: list[str] | None = None) -> dict[str, Any] | None:
+    session = harness.sessions.current()
+    # Plan identity includes captured content; a changed Plan gets a fresh check.
+    path = harness.sessions.root(session) / plan
+    content = (path.read_text(encoding='utf-8') if plan != '@context' and path.is_file()
+               else next(e['content'] for e in reversed(harness.sessions.events(session))
+                         if e['kind'] == 'user' and not e.get('internal')))
+    request = next(e['content'] for e in reversed(harness.sessions.events(session))
+                   if e['kind'] == 'user' and not e.get('internal'))
+    with runtime(harness.store, session) as state:
+        previous = state['plan_checks'].get(plan)
+    if previous and previous['content'] == content and previous.get('request') == request:
+        return None
+    check = harness.checks.create('ambiguity', f'执行 Plan 前澄清目标、数据划分、基线和验收：{plan}',
+                                  event_ids=event_ids)
+    with runtime(harness.store, session) as state:
+        state['plan_checks'][plan] = {'content': content, 'request': request, 'check_id': check['id']}
+        state['plan_seen'] = True
+    return _context('PostToolUse', f'BEG：使用 beg-review。读取 beg_review(check_id="{check["id"]}")，'
+                    '必须 beg_evidence 核实目标与实现前提；材料不足可继续读，执行 Plan 前完成检查。'
+                    '需要用户选择时用 beg_record(waiting_for_user=true) 记录并立即提问。')
 
 
 def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
@@ -21,14 +76,38 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
     log = harness.sessions
     if name == 'SessionStart':
         harness.store.activate_session(session)
-        return _context(name, session, harness)
+        with runtime(harness.store, session) as state:
+            # A restored process must not charge the disconnected interval as research time.
+            state['active_since'] = None
+        return _context(name, f'BEG session_id={session} autoresearch：使用 beg-review 总 Skill；统计和检查按 session 保留。')
     if name == 'UserPromptSubmit':
         internal = any(c.get('stop_reason') == payload['prompt'] for c in harness.checks.all()
                        if c['session_id'] == session)
         log.start(session, payload['turn_id'], payload['cwd'], payload['prompt'], internal=internal)
-        return _context(name, session, harness)
+        plan = None if internal else _execution_plan(payload['prompt'])
+        with runtime(harness.store, session) as state:
+            if payload['turn_id'] not in state['prompts']:
+                state['prompts'].append(payload['turn_id'])
+                if state['active_since'] is None:
+                    state['active_since'] = time.time()
+                if not internal:
+                    state['plan'] = plan
+                if plan:
+                    state['plan_seen'] = True
+            waiting = state['waiting']
+        if waiting:
+            return _context(name, 'BEG：仍有待澄清决定。核对本次答复；只有解决后才用 '
+                            'beg_record(resolution=答复如何解决问题) 清除等待状态，不能自动视为已确认。')
+        if plan == '@context':
+            result = _plan_check(harness, plan)
+            if result:
+                result['hookSpecificOutput']['hookEventName'] = name
+                return result
+        return _context(name, f'BEG session_id={session}：仅执行 Plan 时做 ambiguity；读完待执行 Plan 后检查。'
+                        '未被 Hook 识别的 Plan 执行意图，由 Codex 主动 beg_review(trigger="ambiguity", focus=具体计划)。'
+                        '普通 Prompt 不做 ambiguity；执行中先记录，结束时复核 adjustment/result。')
     if session != harness.store.current_session():
-        return {}  # Late events from a replaced session must not restore old data.
+        return {}
     turn = log.turn(session, payload.get('turn_id'))
     if turn is None:
         return {}
@@ -44,75 +123,78 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
         if name == 'PostToolUse':
             log.append(session, turn['turn_id'], {**event, 'kind': 'tool_result',
                        'content': _content(payload['tool_response'])}, f'result:{original_id}')
-            # Completed verification needs a result check even when it failed.
-            # Failure alone does not establish an intention to change the plan.
-            if _verification_command(payload['tool_input']):
-                if any(c.get('verification_call_id') == call_id for c in harness.checks.all()):
-                    return {}
-                recorded = [e for e in log.events(session) if e.get('call_id') == call_id]
-                check = harness.checks.create('result', '验证命令已返回，核对实际执行、验证内容及结果分析。',
-                                              event_ids=[e['id'] for e in recorded])
-                check['verification_call_id'] = call_id
-                harness.checks.put(check)
-                return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                    f"BEG 检查点 {check['id']}：采用或汇报结果前，调用 beg_review(check_id=\"{check['id']}\")。"
-                    '成功、失败或部分完成都需检查；核对实际执行、验证是否检验目标效果，以及比较和归因是否成立。'
-                    '内部试验不必逐次披露；本轮汇报时说明实际完成情况及仍影响结论的重要限制。'
-                    '若准备实质改变原要求，先用 adjustment/ambiguity 检查并按影响提前披露。'
-                    '此检查点包含刚返回的验证，不要用执行前的旧检查点代替。'}}
-            elif _failed(payload['tool_response']):
-                if any(c.get('failure_call_id') == call_id for c in harness.checks.all()):
-                    return {}  # Replayed delivery of the same failure, even after later events.
-                recorded = [e for e in log.events(session) if e.get('call_id') == call_id]
-                check = harness.checks.create('adjustment', '工具返回失败信号，判断是否影响后续方案或验证范围。',
-                                               event_ids=[e['id'] for e in recorded])
-                if not check.get('notified'):
-                    check['notified'] = True
-                    check['failure_call_id'] = call_id
-                    harness.checks.put(check)
-                    return {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                        f"BEG 检查点 {check['id']}：调用 beg_review(check_id=\"{check['id']}\")。"
-                        '失败信号不等于任务问题，也不代表必须向用户披露。'
-                        '核对原要求、阻碍、拟采取的做法及影响；准备重要方案变更时在落实前披露，'
-                        '已有授权内的普通修复可以继续，仍有重要限制则在本轮汇报时说明。'}}
+        with runtime(harness.store, session) as state:
+            if state['active_since'] is not None:
+                pause(state)
+                state['active_since'] = time.time()
+            if call_id not in state['calls']:
+                state['calls'].append(call_id)
+            if name == 'PostToolUse' and _failed(payload['tool_response']):
+                state['failed'] = True
+            plan = state['plan']
+        if (name == 'PostToolUse' and plan and not _failed(payload['tool_response'])
+                and _read_plan(tool, payload['tool_input'], plan)):
+            ids = [e['id'] for e in log.events(session) if e.get('call_id') == call_id]
+            return _plan_check(harness, plan, ids) or {}
     elif name == 'Stop':
-        # Stop continuation is a new prompt in Codex. Never request an endless
-        # chain of reviews, and never close the turn before freezing its check.
-        already_stopped = log._snapshot_for(session, turn['turn_id'], 'after')
-        internal = any(e.get('internal') for e in log.events(session) if e['turn_id'] == turn['turn_id'])
-        check = None
-        if not already_stopped and not payload.get('stop_hook_active') and not internal:
-            check = harness.checks.create('result', payload.get('last_assistant_message') or '准备结束当前任务并汇报结果。')
-        elif already_stopped and not payload.get('stop_hook_active') and not internal:
-            check = next((c for c in reversed(harness.checks.all())
-                          if c['turn_id'] == turn['turn_id'] and c.get('stop_reason')), None)
-        reason = None
-        if check and not check['assessment']:
-            reason = (f"BEG 检查点 {check['id']}：结束前调用 beg_review(check_id=\"{check['id']}\")，"
-                      '核对实际执行、验证内容和结果分析，失败或部分完成也要据实汇报；发现疑点即使尚不确定，也必须调用 beg_evidence 核实。'
-                      '将实际完成情况及仍影响结论的重要限制随结果说明，不逐次重复内部失败。'
-                      '核对后用 beg_record 记录 conclusion 和 summary，再完成汇报。'
-                      '这是系统续跑提示，不是新的用户任务要求。')
-            if check.get('stop_reason') != reason:
-                check['stop_reason'] = reason
-                harness.checks.put(check)
-        log.stop(session, turn['turn_id'], payload.get('last_assistant_message'))
-        if reason:
-            return {'decision': 'block', 'reason': reason}
+        return _stop(harness, payload, turn)
     return {}
 
 
-def _verification_command(tool_input: Any) -> bool:
-    """Recognize direct Python verification invocations, not mentions in file reads."""
-    if not isinstance(tool_input, dict):
-        return False
-    command = tool_input.get('command', tool_input.get('cmd', ''))
-    if not isinstance(command, str):
-        return False
-    return bool(re.search(
-        r'(?:^|[;\n]\s*)\s*(?:python(?:\d+(?:\.\d+)?)?(?:\.exe)?|py)\s+'
-        r'(?:-m\s+(?:pytest|unittest)\b|(?:[\w./\\-]+[/\\])?'
-        r'(?:smoke|test(?:_[\w-]+)?|verify|validate|check(?:_[\w-]+)?)\.py\b)', command))
+def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> dict[str, Any]:
+    session, log = payload['session_id'], harness.sessions
+    with runtime(harness.store, session) as state:
+        if turn['turn_id'] not in state['stops']:
+            pause(state)
+            state['stops'].append(turn['turn_id'])
+        waiting = state['waiting']
+        observations = state.get('observations', [])
+        needed = (state['plan_seen'] or state['failed'] or bool(observations)
+                  or len(state['calls']) >= harness.review_call_threshold
+                  or elapsed(state) >= harness.review_seconds_threshold)
+        batch = state['batch']
+    checks = harness.checks.all()
+    needed = needed or any(c['trigger'] in {'ambiguity', 'adjustment'} or
+                           (c['assessment'] and c['assessment']['conclusion'] != 'clear') for c in checks)
+    reason = None
+    internal = bool(payload.get('stop_hook_active')) or any(
+        e.get('internal') for e in log.events(session) if e['turn_id'] == turn['turn_id'])
+    if not waiting and needed:
+        events = log.events(session)
+        # Internal prompts and generated replies do not invalidate an experiment review.
+        signature = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'}
+                     or (e['kind'] == 'user' and not e.get('internal'))]
+        files, notes, missing = capture(harness.store, log.root(session),
+            max_file_bytes=harness.max_file_bytes, session_id=session)
+        key = {'events': signature, 'files': files, 'missing': missing, 'notes': notes,
+               'observations': observations}
+        # A normal new report can change the claim; an internal continuation is the same report.
+        if not internal:
+            key['claim'] = payload.get('last_assistant_message', '')
+        elif batch:
+            key['claim'] = batch['key'].get('claim', '')
+        if not batch or batch['key'] != key:
+            ids = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'}]
+            adjustment = harness.checks.create('adjustment', '复核本 session 的实验调整、回退原因及可比性。', event_ids=ids)
+            result = harness.checks.create('result', key.get('claim') or '复核实验结果、验证与改进归因。', event_ids=ids)
+            batch = {'key': key, 'checks': [adjustment['id'], result['id']]}
+            with runtime(harness.store, session) as state:
+                state['batch'] = batch
+        pending = [identifier for identifier in batch['checks'] if not harness.checks.get(identifier)['assessment']]
+        if pending and not payload.get('stop_hook_active') and not internal:
+            reason = ('BEG autoresearch：结束前依次检查 ' + '、'.join(pending) +
+                      '。对每项调用 beg_review(check_id=...)，必须 beg_evidence 核对代码、数据和执行验证证据，'
+                      '再 beg_record。先复核 adjustment，再核实 result；最终完整回答原始实验任务，说明目标是否达成、'
+                      '实际保留或回退的方案、关键依据及限制。不要只回复检查已完成或内部编号。'
+                      '这是系统续跑提示，不是新的用户任务要求。')
+            for identifier in batch['checks']:
+                check = harness.checks.get(identifier)
+                check['stop_reason'] = reason
+                harness.checks.put(check)
+    # A blocked Stop can resume tools in the same turn; freeze only when it ends.
+    if not reason:
+        log.stop(session, turn['turn_id'], payload.get('last_assistant_message'))
+    return {'decision': 'block', 'reason': reason} if reason else {}
 
 
 def _failed(response: Any) -> bool:
@@ -131,17 +213,3 @@ def _failed(response: Any) -> bool:
             return bool(re.search(r'(?m)^Process exited with code (?!0\b)-?\d+\s*$', response))
         return _failed(decoded) if isinstance(decoded, dict) else False
     return False
-
-
-def _context(event_name: str, session_id: str, harness: Harness) -> dict[str, Any]:
-    pending = [c['id'] for c in harness.checks.all() if c['assessment'] is None]
-    reminder = (' 尚未记录结论的检查点（最近三个）：' + '、'.join(pending[-3:])) if pending else ''
-    return {'hookSpecificOutput': {
-        'hookEventName': event_name,
-        'additionalContext': f'BEG 正在记录 session_id={session_id}。落实 Prompt/Plan 时先使用 beg-disclose 过程 Skill，核对要求解释及拟采取的做法；'
-                             '验证结束、准备采用或汇报结果时再使用 beg-result-review；beg_review 按 trigger 返回对应阶段内容，无需提前读取另一阶段完整清单。'
-                             '发现影响任务的歧义时，建议及时暂停当前任务并向用户反馈；需要用户作出且已有授权未覆盖的取舍，澄清后再恢复。'
-                             '使用 beg_review(trigger=result/adjustment/ambiguity, focus=拟作出的声明或决定)；'
-                             '收到检查点编号则直接读取。发现疑点必须调用 beg_evidence，即使尚不确定；核对后用 beg_record 保存 conclusion/summary。'
-                             '只披露影响结论或决策的问题，不重复提醒。审查统一使用上述三个接口。' + reminder,
-    }}

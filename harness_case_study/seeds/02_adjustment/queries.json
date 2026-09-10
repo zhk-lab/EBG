@@ -1,0 +1,14 @@
+[
+  {"id": "q1", "relevant": "b", "candidates": [
+    {"id": "a", "retrieval_score": 0.92, "pair_features": [0.8, 0.1, 0.8]},
+    {"id": "b", "retrieval_score": 0.76, "pair_features": [0.5, 0.9, 0.0]},
+    {"id": "c", "retrieval_score": 0.45, "pair_features": [0.2, 0.2, 0.4]}]},
+  {"id": "q2", "relevant": "e", "candidates": [
+    {"id": "d", "retrieval_score": 0.88, "pair_features": [0.9, 0.1, 0.7]},
+    {"id": "e", "retrieval_score": 0.74, "pair_features": [0.5, 0.8, 0.0]},
+    {"id": "f", "retrieval_score": 0.41, "pair_features": [0.1, 0.2, 0.3]}]},
+  {"id": "q3", "relevant": "g", "candidates": [
+    {"id": "g", "retrieval_score": 0.94, "pair_features": [0.8, 0.9, 0.0]},
+    {"id": "h", "retrieval_score": 0.73, "pair_features": [0.4, 0.1, 0.5]},
+    {"id": "i", "retrieval_score": 0.32, "pair_features": [0.1, 0.2, 0.4]}]}
+]

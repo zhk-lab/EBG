@@ -9,7 +9,7 @@ from tests.support import ProjectTemporaryDirectory
 
 
 class VerificationChecksTests(unittest.TestCase):
-    def test_failed_verification_is_a_new_result_not_an_assumed_plan_change(self):
+    def test_failed_verification_is_deferred_until_stop(self):
         with ProjectTemporaryDirectory() as root:
             repo = root / 'repo'
             repo.mkdir()
@@ -21,14 +21,18 @@ class VerificationChecksTests(unittest.TestCase):
                        'tool_use_id': 'passed', 'tool_input': {'command': 'python -m unittest'},
                        'tool_response': {'exit_code': 0}}
             handle_hook(harness, payload)
-            old = harness.checks.all()[-1]
+            self.assertEqual(harness.checks.all(), [])
+            old = harness.checks.create('result', 'Initial tests')
+            harness.checks.evidence(old['id'], 'What verification ran?')
             harness.checks.record(check_id=old['id'], conclusion='clear', summary='Initial tests passed.')
             failed = {**payload, 'tool_use_id': 'failed',
                       'tool_response': {'exit_code': 1, 'stdout': 'Numerical tolerance exceeded.'}}
             response = handle_hook(harness, failed)
+            self.assertEqual(response, {})
+            handle_hook(harness, {**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'Tests failed.'})
             check = harness.checks.all()[-1]
             self.assertEqual(check['trigger'], 'result')
-            self.assertEqual(check['verification_call_id'], '1:failed')
+            self.assertIn('1:failed', [e.get('call_id') for e in check['events']])
             self.assertIsNone(check['assessment'])
             self.assertNotIn('decision', response)
             current = yaml.safe_load(harness.checks.review(check_id=check['id']))
@@ -40,7 +44,7 @@ class VerificationChecksTests(unittest.TestCase):
             self.assertEqual(handle_hook(harness, failed), {})
             self.assertEqual(len(harness.checks.all()), count)
 
-    def test_execution_triggers_before_report_and_returns_exact_frozen_receipt(self):
+    def test_stop_review_returns_exact_frozen_receipt(self):
         with ProjectTemporaryDirectory() as root:
             repo = root / 'repo'
             (repo / 'receipts/new').mkdir(parents=True)
@@ -56,7 +60,8 @@ class VerificationChecksTests(unittest.TestCase):
                        'tool_use_id': 'smoke', 'tool_input': {'command': 'python scripts/smoke.py'},
                        'tool_response': {'exit_code': 0, 'stdout': 'Record: receipts/new/result.json'}}
             response = handle_hook(harness, payload)
-            self.assertIn('beg_review', str(response))
+            self.assertEqual(response, {})
+            handle_hook(harness, {**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'Smoke completed.'})
             check = harness.checks.all()[-1]
             self.assertEqual(check['trigger'], 'result')
             ctx = yaml.safe_load(harness.checks.review(check_id=check['id']))
@@ -102,6 +107,7 @@ class VerificationChecksTests(unittest.TestCase):
             handle_hook(harness, {**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'Bash',
                 'tool_use_id': 'live', 'tool_input': {'command': 'python scripts/smoke.py'},
                 'tool_response': {'exit_code': 0, 'stdout': 'receipt.json'}})
+            harness.checks.create('result', 'Review live verification receipt.')
             check = harness.checks.all()[-1]
             context = yaml.safe_load(harness.checks.review(check_id=check['id']))
             self.assertIsNone(context['assessment'])

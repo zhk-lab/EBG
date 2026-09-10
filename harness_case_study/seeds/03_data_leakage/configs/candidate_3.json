@@ -1,0 +1,12 @@
+{
+  "neighbors": 5,
+  "distance_weighted": true,
+  "use_extra": true,
+  "feature_weights": [
+    1,
+    1,
+    1,
+    1
+  ],
+  "seed": 17
+}

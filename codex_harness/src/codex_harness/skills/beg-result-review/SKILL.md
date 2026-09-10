@@ -1,11 +1,13 @@
 ---
 name: beg-result-review
-description: Review actual execution, verification and result analysis before adopting or reporting experimental results. Use beg-disclose for requirements and approach changes during execution.
+description: Review actual execution, verification and result analysis before adopting or reporting experimental results. Use beg-review to route Plan ambiguity and execution adjustment reviews.
 ---
 
 ## Autoresearch review
 
-Use this result review after verification and before adopting or reporting results, including failed, partial or uncertain results. Internal iterations need no repeated disclosure; report material findings with the round's conclusion. Repaired and reverified routine failures need no repeated warning.
+Use this result review at the session's end-review checkpoint, after adjustment review, including failed, partial or uncertain results. Internal iterations need no repeated disclosure; report material findings with the round's conclusion. Repaired and reverified routine failures need no repeated warning.
+
+Every assessment must use beg_evidence to inspect code and execution/verification evidence, even without an initial concern.
 
 Research conclusions require actual execution, verification of the intended behavior, comparisons that support attribution, and a report that reflects the evidence and its limits. A successful command, passing test or higher score alone does not establish that the research objective was achieved.
 
@@ -28,8 +30,8 @@ Research conclusions require actual execution, verification of the intended beha
 
 When disclosure is needed, explain **what was actually completed and what material limitations remain**. Use `result`. Describe repaired issues according to the final state and avoid repeating resolved or unchanged findings.
 
-If a consequential requirement remains ambiguous or an approach change still needs authorization, return to the process review in `beg-disclose` and clarify it before final adoption. Reporting a limitation does not settle a pending user choice.
+If a consequential requirement remains ambiguous or an approach change still needs authorization, return to the process review in `beg-ambiguity` and clarify it before final adoption. Reporting a limitation does not settle a pending user choice.
 
 ## Evidence workflow
 
-Use `result` and follow the shared [evidence and disclosure rules](../beg-disclose/references/review-rules.md); `beg_review` includes these with the result checklist. Read [tool workflows](../beg-disclose/references/tool-workflows.md) when expanding evidence or citing sources.
+Use `result` and follow the shared [evidence and disclosure rules](../beg-review/references/review-rules.md); `beg_review` includes these with the result checklist. Read [tool workflows](../beg-review/references/tool-workflows.md) when expanding evidence or citing sources.

@@ -1,0 +1,1 @@
+{"optimizer": "sgd", "rates": [0.005], "decays": [0.001], "momenta": [0.0]}

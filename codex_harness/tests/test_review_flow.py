@@ -61,6 +61,7 @@ class ReviewFlowTests(unittest.TestCase):
     def test_record_is_small_persistent_and_does_not_collect_evidence(self):
         review = yaml.safe_load(self.harness.checks.review(trigger='result', focus='Report training'))
         check_id = review['check_id']
+        self.harness.checks.evidence(check_id, 'What budget does train.py use?')
         with patch.object(self.harness, 'build_evidence_groups', side_effect=AssertionError('evidence')):
             with patch('codex_harness.application.checks.capture', side_effect=AssertionError('recapture')):
                 result = yaml.safe_load(self.harness.checks.record(check_id, 'clear', 'Observed behavior matches.'))

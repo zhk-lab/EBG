@@ -11,6 +11,7 @@ from uuid import uuid4
 from .repository import capture
 from .requirements import normalize_requirements
 from .storage import HarnessError, dumps
+from .runtime import runtime, pause
 
 if TYPE_CHECKING:
     from .service import Harness
@@ -20,15 +21,15 @@ TRIGGERS = {'result', 'adjustment', 'ambiguity'}
 
 
 def _review_protocol(trigger: str) -> dict[str, str]:
-    name = 'beg-result-review' if trigger == 'result' else 'beg-disclose'
+    name = {'result': 'beg-result-review', 'ambiguity': 'beg-ambiguity', 'adjustment': 'beg-adjustment'}[trigger]
     resources = resource_files('codex_harness').joinpath('skills')
     skill = resources.joinpath(name, 'SKILL.md')
     _, marker, section = skill.read_text(encoding='utf-8').partition('## Autoresearch review\n')
     if not marker:
         raise HarnessError(f'{name} Skill is missing its Autoresearch review section.')
-    shared = resources.joinpath('beg-disclose', 'references', 'review-rules.md').read_text(encoding='utf-8')
+    shared = resources.joinpath('beg-review', 'references', 'review-rules.md').read_text(encoding='utf-8')
     return {'source': f'{name}/SKILL.md :: Autoresearch review',
-            'shared_source': 'beg-disclose/references/review-rules.md',
+            'shared_source': 'beg-review/references/review-rules.md',
             'content': section.split('\n## ', 1)[0].strip() + '\n\n' + shared.strip(),
             'note': 'Apply to research decisions and conclusions at the relevant disclosure stage. This is review guidance, not a user requirement or a finding.'}
 
@@ -37,17 +38,17 @@ REVIEW_GUIDANCE = {
         '按 beg-result-review 核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
         '追踪实际执行分支，核实测试及断言是否检验成功条件，判断数据、配置、资源与结果选择是否支持提升归因。'
         '采用结果前先检查；不必每次内部试验都披露，在本轮汇报中说明实际完成情况与仍影响结论的重要限制。'
-        '若下一步需要解释关键歧义或实质改变原要求，先创建 ambiguity 或 adjustment 检查，再作决定。'
+        '每项审查必须 beg_evidence 核对相关代码、数据和执行证据；不能用分数或成功标记代替实验有效性判断。'
         '发现影响任务的歧义时，建议及时暂停当前任务并向用户反馈，不等做完再说明；需要用户确认的取舍未解决时，不能仅因已披露就判该决定 clear。'
     ),
     'adjustment': (
-        '按 beg-disclose 过程审查，核对原要求、受阻证据、拟采取的替代方案、影响和已有授权。'
+        '按 beg-adjustment 在结束前复核原要求、受阻证据、实际调整或回退、影响和已有授权。'
         '工具失败只是检查信号，不证明需要变更方案或向用户披露。'
-        '准备作出影响原要求的重要调整时，在落实前说明问题、做法及影响；需要用户取舍且已有授权未覆盖时，暂停当前任务并向用户反馈，澄清后再恢复。'
+        '授权内调整在执行中记录，结束前统一取证复核；需要用户取舍且已有授权未覆盖时，记录等待澄清并立即提问。'
         '普通重试或已修复并验证的临时失败不必反复报告，替代操作成功不等于原要求已满足。'
     ),
     'ambiguity': (
-        '按 beg-disclose 过程审查，区分用户明确要求、Agent 自拟计划与未确定假设。'
+        '按 beg-ambiguity 在执行 Plan 前审查，区分用户明确要求、Agent 自拟计划与未确定假设。'
         '明确歧义、拟采用的解释及其对目标、约束、验收或实验结论的影响，在落实关键解释前披露。'
         '发现可能实质影响目标、执行方式、验收或结果解释的歧义时，建议及时暂停当前任务，向用户说明歧义、可能影响和需要澄清的问题，不等做完再反馈。'
         '必要取证围绕歧义展开，避免继续推进任务而延后汇报；需要用户作出且已有授权未覆盖的取舍，等待答复后再恢复。默认值或已披露的假设不能代替确认。'
@@ -125,9 +126,11 @@ class Checks:
         reference_text = '\n'.join([focus, *[s['content'] for s in sources],
                                    *[e['content'] for e in events if e['id'] in anchors]])
         selected_plans = set(plan_ids or []) | {p['id'] for p in plans.values() if p['path'] in reference_text}
+        with runtime(self.store, session) as state:
+            observations = state.get('observations', [])
         key = {'trigger': trigger, 'focus': focus.strip(), 'event_ids': [e['id'] for e in events],
                'anchors': anchors, 'plans': sorted(selected_plans), 'files': files,
-               'uncollected_files': uncollected, 'notes': notes}
+               'uncollected_files': uncollected, 'notes': notes, 'observations': observations}
         previous = next((c for c in reversed(self.all()) if c['session_id'] == session and c['key'] == key), None)
         if self.log._cutoff(session) != cutoff:
             raise HarnessError('Events changed during checkpoint capture; retry.')
@@ -141,7 +144,7 @@ class Checks:
                  'baseline_uncollected_files': before.get('uncollected_files', {}) if before else {},
                  'events': events, 'sources': sources + list(plans.values()),
                  'selected_plans': sorted(selected_plans), 'anchors': anchors, 'snapshots': snapshots,
-                 'assessment': None, 'review_protocol': _review_protocol(trigger)}
+                 'observations': observations, 'assessment': None, 'review_protocol': _review_protocol(trigger)}
         self.put(check, new=True)
         return check
 
@@ -163,23 +166,29 @@ class Checks:
             # Include the question's whole turn, not an arbitrary last-N tail.
             turns = {e['turn_id'] for e in trace} or {check['turn_id']}
             trace = [e for e in events if e['turn_id'] in turns and e['kind'] != 'user']
-        latest = next((c for c in reversed(self.all()) if c.get('verification_call_id')), None)
-        newer = latest is not None and latest['cutoff'] > check['cutoff']
+        latest = next((c for c in reversed(self.all()) if c['trigger'] == 'result'), None)
+        newer = any(e['seq'] > check['cutoff'] and e['kind'] == 'tool_result'
+                    for e in self.log.events(check['session_id']))
+        latest_result_seq = max((e['seq'] for e in self.log.events(check['session_id'])
+                                 if e['kind'] == 'tool_result'), default=0)
+        if latest and latest['cutoff'] < latest_result_seq:
+            latest = None
         payload = {'check_id': check['id'], 'trigger': check['trigger'], 'focus': check['focus'],
                    'cutoff': check['cutoff'], 'assessment': check['assessment'],
                    'execution_scope': {
                        'covers_latest_verification': not newer,
                        'latest_check_id': latest['id'] if latest else None,
-                       'note': ('本检查点早于新的验证，不能支持该次验证的完成声明；请读取 latest_check_id。'
+                       'note': ('本检查点早于新的工具执行；读取适用的 latest_check_id，若为空则新建检查点。'
                                 if newer else '仅核对当前冻结材料；之后的新执行需重新检查。'),
                    },
-                   'note': '先核对要求、执行记录和检查条目，不默认展开代码。发现疑点，即使尚不确定，也必须调用 beg_evidence；核实后用 beg_record 保存判断。读取或记录不等于向用户披露。',
+                   'note': '每项审查必须调用 beg_evidence；adjustment/result 必须核对相关代码与执行验证证据，不能只凭 trace 或分数判断。核实后用 beg_record 保存判断。读取或记录不等于向用户披露。',
                    'review_guidance': REVIEW_GUIDANCE[check['trigger']] +
                        '只披露证据支持且影响结论或决策的问题，不把尚未检查的可能性写成事实。',
                    'review_protocol': check.get('review_protocol', {}),
                    'prompts': [s for s in check['sources'] if s['kind'] == 'user'],
                    'plans': [s for s in check['sources'] if s['id'] in check['selected_plans']],
                    'trace': trace,
+                   'observations': check.get('observations', []),
                    'plan_candidates': [{k: s[k] for k in ('id', 'path', 'label')}
                                        for s in check['sources'] if s['kind'] == 'plan'],
                    'scope_note': 'Prompt 保留当前会话全部用户原文，可能含其他任务，由模型判断适用范围。默认 Trace 按关联调用或当前轮选取；完整上下文可展开。Markdown 候选不自动视为 Plan。',
@@ -195,16 +204,56 @@ class Checks:
         ref = self.harness.pages.save(owner, payload)
         return self.harness.pages.read(owner, ref)
 
-    def record(self, check_id: str, conclusion: str, summary: str) -> str:
+    def record(self, check_id: str | None = None, conclusion: str | None = None, summary: str = '', *,
+               waiting_for_user: bool = False, resolution: str | None = None,
+               note_kind: str | None = None, decision_status: str = 'proposed') -> str:
         """Save the agent's judgment without rereading sources or building evidence."""
+        if note_kind is not None:
+            if (note_kind not in {'adjustment', 'limitation'} or not summary.strip()
+                    or decision_status not in {'proposed', 'executed'}
+                    or check_id is not None or conclusion is not None or waiting_for_user or resolution is not None):
+                raise HarnessError('A process note needs note_kind, summary and proposed/executed status; no assessment fields.')
+            session = self.log.current()
+            note = {'kind': note_kind, 'summary': summary.strip(), 'status': decision_status,
+                    'cutoff': self.log._cutoff(session)}
+            with runtime(self.store, session) as state:
+                observations = state.setdefault('observations', [])
+                if note not in observations:
+                    observations.append(note)
+            return dumps({'recorded': True, 'note': '过程事项已记录，结束时取证复核；这不是审查结论或执行授权。'})
         if conclusion not in {'clear', 'issue', 'uncertain'} or not summary or not summary.strip():
             raise HarnessError('Assessment needs clear/issue/uncertain and a nonempty summary.')
         check = self.get(check_id)
+        if not check.get('evidence_queries'):
+            raise HarnessError('Call beg_evidence with a concrete question before recording any assessment.')
+        if waiting_for_user and (conclusion == 'clear' or resolution is not None):
+            raise HarnessError('A pending user choice cannot be clear or resolved at the same time.')
+        with runtime(self.store, check['session_id']) as state:
+            waiting = state['waiting']
+        if resolution is not None:
+            if not resolution.strip() or not waiting or waiting['check_id'] != check_id:
+                raise HarnessError('Resolve the existing waiting checkpoint with a nonempty explanation.')
+            if not any(e['kind'] == 'user' and not e.get('internal') and e['seq'] > waiting['cutoff']
+                       for e in self.log.events(check['session_id'])):
+                raise HarnessError('Wait for a new user reply before resolving the choice.')
+        elif waiting and conclusion == 'clear':
+            raise HarnessError('Supply resolution after the user reply before clearing this choice.')
         check['assessment'] = {'conclusion': conclusion, 'summary': summary.strip(),
+                               'waiting_for_user': waiting_for_user, 'resolution': resolution,
                                'origin': 'agent judgment; not an independently verified verdict'}
         self.put(check)
+        with runtime(self.store, check['session_id']) as state:
+            if check['trigger'] == 'ambiguity':
+                state['plan_seen'] = True
+            if waiting_for_user:
+                state['waiting'] = {'check_id': check_id, 'question': summary.strip(),
+                                    'cutoff': self.log._cutoff(check['session_id'])}
+                pause(state)
+            elif resolution is not None:
+                state['waiting'] = None
         return dumps({'check_id': check_id, 'recorded': True, 'conclusion': conclusion,
-                      'note': 'Recorded agent judgment; this does not establish user-facing disclosure.'})
+                      'note': ('现在向用户提出澄清问题，然后结束本轮回答，等待答复。不要继续实施依赖该选择的方案。'
+                               if waiting_for_user else 'Recorded agent judgment; this does not establish user-facing disclosure.')})
 
     def evidence(self, check_id: str, question: str | None = None, refs: list[dict[str, Any]] | None = None,
                  *, read_ref: str | None = None, offset: int = 0) -> str:
@@ -276,4 +325,10 @@ class Checks:
             if additions:
                 task['sources'].extend(additions)
                 self.store.put_task(task)
-        return self.harness.build_evidence_groups(task_id, [{'id': 'R1', 'check': question, 'refs': refs}])
+        result = self.harness.build_evidence_groups(task_id, [{'id': 'R1', 'check': question, 'refs': refs}])
+        check = self.get(check_id)
+        queries = check.setdefault('evidence_queries', [])
+        if question not in queries:
+            queries.append(question)
+            self.put(check)
+        return result

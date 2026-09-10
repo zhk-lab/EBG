@@ -1,0 +1,1 @@
+{"optimizer": "momentum", "rates": [0.01, 0.04, 0.16], "decays": [0.0, 0.001, 0.01], "momenta": [0.5, 0.8, 0.95]}

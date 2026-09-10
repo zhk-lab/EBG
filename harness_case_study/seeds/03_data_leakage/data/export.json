@@ -1,0 +1,6 @@
+{
+  "id_scope": "export-local",
+  "rows": 80,
+  "export_index": "lineage/exports.csv",
+  "build_inputs": "lineage/inputs.csv"
+}

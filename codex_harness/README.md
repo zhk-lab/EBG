@@ -1,6 +1,6 @@
 # BEG Codex Harness
 
-独立运行的 BEG 应用：Hook 记录过程并提供检查信号，Codex 先读相关上下文，发现疑点时必须用 BEG 查证据，主动披露影响结论或决策的问题。核对不修改目标代码、不运行测试；处理问题后可恢复原任务。
+面向 autoresearch 的独立 BEG 应用：Hook 记录实验过程并触发阶段审查，每项审查必须调用 beg_evidence，核对数据隔离、实验可比性和结论归因。审查工具不修改目标代码、不运行实验。
 
 | 工具 | 作用 |
 |---|---|
@@ -16,18 +16,18 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m codex_harness --state-dir .state/runtime setup --output .state/integration
 ```
 
-将生成的 `config.toml` 合入目标项目 `.codex/config.toml`，`hooks.json` 合入 `.codex/hooks.json`，保留已有配置；将生成的 `skills/beg-disclose/` 和 `skills/beg-result-review/` 一起放入 `.agents/skills/`。升级时覆盖原 beg-disclose 内容，保留两目录的相对位置以便读取共同规则。在 Codex 中加载配置并信任 Hook 后开始任务；所有审查统一使用上述三个接口。移动目录后重新运行 setup。macOS/Linux 使用 `.venv/bin/python`。
+将生成的 `config.toml`、`hooks.json` 合入目标项目 `.codex/` 并保留已有配置；将生成的四个 Skill（beg-review、beg-ambiguity、beg-adjustment、beg-result-review）放入 `.agents/skills/`。升级时移除旧 beg-disclose Skill，保留四个新目录的相对位置。在 Codex 中加载配置并信任 Hook；移动目录后重新运行 setup。macOS/Linux 使用 `.venv/bin/python`。
 
-主动检查的三个触发类型为 `result`（采用／汇报结果）、`adjustment`（受阻或重要方案调整）、`ambiguity`（关键要求不明确）。检查与用户披露分开：内部试验不必逐次披露，主要在本轮汇报时说明实际完成情况及仍影响结论的重要限制；关键歧义或重要方案变更在落实前提前披露。方案调整、重要歧义和采用意图由 Codex 按 Skill 显式提交。
+三个阶段：Plan 执行前的 `ambiguity`、结束时的 `adjustment` 和 `result`。授权内的调整先记录、汇报时统一披露；需要用户决定的关键取舍在落实前提问。总 Skill 负责流程，分阶段清单明确 autoresearch 的数据、实验及归因检查要求。
 
-Hook 识别结构化工具失败（非零 exit_code／exitCode、MCP isError）和标准 shell 退出状态。非验证工具失败创建 `adjustment` 检查点，但失败不自动证明需要换方案或向用户披露。通知不替换原工具结果，也不直接判定违规。
+两个审查信号：读取待执行 Plan 后的 `PostToolUse` 提醒 ambiguity；`Stop` 依次触发 adjustment/result。自动识别限于明确执行请求和 Read/read_file 或常见 shell 读取命令；未识别的意图由 Codex 主动调用 beg_review(trigger="ambiguity")。Plan 已在上下文时直接提醒。
 
-直接运行 Python 的 smoke/test/verify/validate/check 脚本或 `-m pytest/unittest` 返回后，无论成功或失败，Hook 都创建 `result` 检查点，要求采用或汇报前核对实际执行、实际验证和结果分析；读取或 echo 这些命令不触发。该识别范围有限，其他入口仍由 Skill 显式触发，并未自动识别所有 autoresearch 轮次。显式调用 `beg_evidence` 后，沿对应工具输出中的文件引用补取冻结结果材料；`execution_scope` 指出较新的验证检查点，失败验证同样会使旧检查点不再覆盖最新验证。提示只要求核对，不将命令返回或记录中的模式自动判成任务成功／失败。
+工具失败与验证结束只记录，不立即审查。按 session 累计：执行 Plan、调用达到 10 次、活动耗时达到 300 秒、工具失败或重要过程事项，任一条件满足即在 Stop 审查。可用 `--review-call-threshold`、`--review-seconds-threshold` 配置，setup 同步写入 MCP 与 Hook 参数。排除 Harness 自身调用、重复事件和回合间闲置；恢复进程不计断开时间。已审查且内容未变则复用。
 
 ```text
 beg_review(trigger="result", focus="准备采用本轮提升结果")
 → 读取 Prompt、相关 Trace 和 Plan，保留 check_id
-→ 发现疑点（即使尚不确定）必须 beg_evidence(check_id=..., question=...)
+→ 每项必须 beg_evidence(check_id=..., question=具体审查问题)，核实代码与执行证据
 → 全部材料展开均用 beg_evidence(check_id=..., read_ref=..., offset=...)
 → 判断后 beg_record(check_id=..., conclusion="clear/issue/uncertain", summary="依据、影响与处理")
 → 按适用时机披露重要问题或继续任务
@@ -37,7 +37,11 @@ Hook 已给出 check_id 时直接读取，不重新创建。每个检查点固�
 
 MCP 仅暴露上述三个接口，材料展开统一使用 `beg_evidence`。更新后重新生成并同步 Skill，重启 MCP 连接以加载新接口。已有历史评测轨迹保留当时的接口名称。
 
-读取不等于完成检查。beg_record 的 conclusion／summary 保存的是 Agent 判断，不证明已向用户披露。相同焦点、事件和采集状态可复用；变化则建立新检查点，prior_assessments 用于避免重复提醒。二进制内容仍未采集，不能声称复用已验证了二进制内容一致。中断后可用同一状态目录及 check_id 续读。必须取证是 Skill 和工具说明中的行为要求；程序无法识别 Agent 未表达的疑点，记录接口也不独立验证判断是否正确。
+读取不等于完成检查。beg_record 在没有成功执行 beg_evidence 问题查询时拒绝保存判断；仅翻阅 review 分页不算取证。程序不保证证据充分或结论正确，必须结合清单判断。相同焦点、事件和采集状态可复用；变化则新建检查点。二进制内容未采集，不能声称已验证其一致。
+
+执行中用 `beg_record(note_kind="adjustment"或"limitation", decision_status="proposed"或"executed", summary=原因及影响)` 保存未审查事项，不传 check_id/conclusion。结束审查读取这些记录，再通过证据形成判断。
+
+需要澄清时，取证后用 `beg_record(check_id=..., conclusion="uncertain", summary=问题与影响, waiting_for_user=true)`，立即提问并结束回答。Stop 对待澄清状态放行。真实用户答复解决问题后，用原 check_id 和 `resolution=答复如何解决问题` 清除状态；仅收到新消息不会自动清除。
 
 Stop 在没有对应核对结论时请求一次续跑，并将续跑提示与用户原始要求区分；已处于 Stop 续跑时不再次拦截，避免无限循环。这是兜底机制，不保证收回已经显示的回复；采用／汇报前仍应显式调用 beg_review 并用 beg_record 记录判断。Hook 协议依据 [OpenAI Hooks 文档](https://learn.chatgpt.com/docs/hooks)，需在实际 Codex 环境启用并信任；单元测试和 MCP 集成测试不能替代模型主动披露效果评测。
 
@@ -65,6 +69,6 @@ Autoresearch 的显式 JSON/JSONL 实验记录可返回 `research_context`：以
 
 关联到唯一基线与候选记录时，另比较实际 `evaluation_row_ids` 的样本及重复次数；不能用相同数据文件名替代实际评估样本比较。这个比较只覆盖记录里的 ID，不证明样本内容或标签未变。
 
-使用两份 Skill：`beg-disclose` 负责落实要求及方案调整时的过程审查；`beg-result-review` 负责验证后采用或汇报结果前的执行、验证及结论审查。任务开始先提示过程审查；`beg_review` 按 trigger 只返回对应阶段清单，并附共同取证与披露规则。结果版保留未解决关键歧义的兜底提醒，不重复完整过程清单。共同规则与工具细节位于 `skills/beg-disclose/references/`，setup 会与两份 Skill 一并安装。检查点冻结当时的阶段规则，旧检查点不会自动换成新版。
+使用一个总 Skill `beg-review` 和三个阶段 Skill `beg-ambiguity`、`beg-adjustment`、`beg-result-review`。beg_review 按 trigger 仅返回对应清单及共同规则；共同规则和工具细节位于 `skills/beg-review/references/`，setup 一并安装。检查点冻结当时规则，旧检查点不自动替换。
 
-Case3 的 [普通组记录](../harness_case_study/case3/plain_trace.jsonl) 与 [BEG 记录](../harness_case_study/case3/beg_trace.jsonl) 保留各自运行时的接口与行为，版本及来源见 [案例说明](../harness_case_study/case3/CASE.md)。它们不是本次清理接口后的配对重测，也不代表稳定成功率。
+三个历史案例的简要说明见 [BEG_disclose_harness.md](BEG_disclose_harness.md)。案例用于说明审查问题，不代表当前接口的配对重测结果或稳定成功率。

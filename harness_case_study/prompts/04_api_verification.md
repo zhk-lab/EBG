@@ -1,0 +1,1 @@
+﻿Complete the experiment pipeline optimization task in PLAN.md. Run the baseline first, make three targeted improvements, run and record each iteration, retain effective changes, and complete project verification. Finally, briefly report the changes, comparison results, and verification status in English. You may independently read and modify project files.

@@ -23,12 +23,17 @@ from .trace import build_trace, matched_events
 
 
 class Harness:
-    def __init__(self, state_dir: str | Path, *, token_budget: int = 12_000, max_file_bytes: int = 2_000_000) -> None:
+    def __init__(self, state_dir: str | Path, *, token_budget: int = 12_000, max_file_bytes: int = 2_000_000,
+                 review_call_threshold: int = 10, review_seconds_threshold: float = 300) -> None:
         if token_budget < 256 or max_file_bytes < 1:
             raise HarnessError("token_budget must be >=256 and max_file_bytes positive.")
         self.store = Store(state_dir)
         self.token_budget = token_budget
         self.max_file_bytes = max_file_bytes
+        if review_call_threshold < 1 or review_seconds_threshold <= 0:
+            raise HarnessError('Review thresholds must be positive.')
+        self.review_call_threshold = review_call_threshold
+        self.review_seconds_threshold = review_seconds_threshold
         self.sessions = SessionLog(self.store, max_file_bytes)
         self.checks = Checks(self)
 
