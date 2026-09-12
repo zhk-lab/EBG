@@ -35,9 +35,10 @@ HOW TO READ THE INPUT
 - `content` preserves source text or an exact excerpt. An ID may have different
   excerpts in several Behaviors: read all its occurrences within the current scope
   before interpreting its evidence. Cite each non-null ID only once, copied exactly.
-- `informs` means one task supplies context explicitly used by another; `supersedes`
-  means it stops or replaces the target task's plan or decision. `support` identifies
-  the source events establishing each relation.
+- Each `references` relation points from this task to `target_task_id`, whose content
+  or output it explicitly references. Relations contain only `type` and `target_task_id`;
+  read the target scope for context. A relation is not evidence of an error or approval
+  and does not change the current-scope evidence requirement.
 - Check user constraints and later approvals or revisions. Tool activity alone does
   not make a decision consequential.
 

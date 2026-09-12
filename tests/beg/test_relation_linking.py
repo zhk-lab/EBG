@@ -144,7 +144,7 @@ class RelationLinkingTests(unittest.TestCase):
         self.assertEqual(call_pairs, {("a", "b"), ("b", "c")})
         self.assertFalse(any("dynamic" in pair for pair in call_pairs))
 
-    def test_trace_informs_links_task_scopes_only_with_explicit_support(self) -> None:
+    def test_trace_shared_path_only_adds_time_edge(self) -> None:
         tool = lambda turn: {
             "event_type": "tool_exchange",
             "turn_number": turn,
@@ -185,12 +185,12 @@ class RelationLinkingTests(unittest.TestCase):
             VALIDATE_EDGES(edges)
 
         self.assertEqual(len(edges), 1)
-        self.assertEqual(edges[0]["type"], "informs")
+        self.assertEqual(edges[0]["type"], "precedes")
         self.assertEqual(edges[0]["source_task_id"], "K0001")
         self.assertEqual(edges[0]["target_task_id"], "K0002")
         self.assertEqual(len(edges[0]["evidence_ids"]), 2)
 
-    def test_trace_supersedes_requires_an_explicit_replacement_and_identity(self) -> None:
+    def test_trace_explicit_id_adds_reference_and_time_edges(self) -> None:
         events = [
             {"event_type": "user_prompt", "turn_number": 1, "content": "Start the evaluation."},
             {
@@ -219,11 +219,10 @@ class RelationLinkingTests(unittest.TestCase):
             edges = build_edges(bundle, evidence, behaviors)
             VALIDATE_EDGES(edges)
 
-        self.assertEqual(len(edges), 1)
-        self.assertEqual(edges[0]["type"], "supersedes")
-        self.assertEqual(edges[0]["source_task_id"], "K0002")
-        self.assertEqual(edges[0]["target_task_id"], "K0001")
-        self.assertEqual(len(edges[0]["evidence_ids"]), 2)
+        self.assertEqual([edge["type"] for edge in edges], ["precedes", "references"])
+        self.assertEqual(edges[1]["source_task_id"], "K0002")
+        self.assertEqual(edges[1]["target_task_id"], "K0001")
+        self.assertEqual(len(edges[1]["evidence_ids"]), 2)
 
     def test_trace_generic_reference_words_do_not_create_edges(self) -> None:
         events = [
@@ -248,7 +247,7 @@ class RelationLinkingTests(unittest.TestCase):
             behaviors = build_behaviors(bundle, evidence)
             edges = build_edges(bundle, evidence, behaviors)
 
-        self.assertEqual(edges, [])
+        self.assertEqual([e["type"] for e in edges], ["precedes", "precedes"])
 
     def test_trace_same_object_and_time_order_do_not_create_edges(self) -> None:
         events = [
@@ -263,7 +262,7 @@ class RelationLinkingTests(unittest.TestCase):
             behaviors = build_behaviors(bundle, evidence)
             edges = build_edges(bundle, evidence, behaviors)
 
-        self.assertEqual(edges, [])
+        self.assertEqual([e["type"] for e in edges], ["precedes"])
 
     def test_validation_rejects_unknown_support_and_build_is_deterministic(self) -> None:
         with ProjectTemporaryDirectory() as temporary:

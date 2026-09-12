@@ -5,7 +5,7 @@ description: Review actual execution, verification and result analysis before ad
 
 ## Autoresearch review
 
-Use this result review at the session's end-review checkpoint, after adjustment review, including failed, partial or uncertain results. Internal iterations need no repeated disclosure; report material findings with the round's conclusion. Repaired and reverified routine failures need no repeated warning.
+Use this result review at Stop when a Plan was executed, the session call/time threshold was reached, or a result limitation was recorded. Run adjustment first only if its separate conditions also apply. The review covers successful, failed, partial or uncertain results. Internal iterations need no repeated disclosure; report material findings with the round's conclusion. Repaired and reverified routine failures need no repeated warning.
 
 Every assessment must use beg_evidence to inspect code and execution/verification evidence, even without an initial concern.
 

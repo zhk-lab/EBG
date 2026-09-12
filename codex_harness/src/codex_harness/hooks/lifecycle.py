@@ -105,7 +105,8 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
                 return result
         return _context(name, f'BEG session_id={session}：仅执行 Plan 时做 ambiguity；读完待执行 Plan 后检查。'
                         '未被 Hook 识别的 Plan 执行意图，由 Codex 主动 beg_review(trigger="ambiguity", focus=具体计划)。'
-                        '普通 Prompt 不做 ambiguity；执行中先记录，结束时复核 adjustment/result。')
+                        '普通 Prompt 不做 ambiguity；执行中先记录，Stop 分别判断 adjustment/result，'
+                        '只检查满足触发条件的阶段；两类都触发时先 adjustment、后 result。')
     if session != harness.store.current_session():
         return {}
     turn = log.turn(session, payload.get('turn_id'))
@@ -149,17 +150,30 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
             state['stops'].append(turn['turn_id'])
         waiting = state['waiting']
         observations = state.get('observations', [])
-        needed = (state['plan_seen'] or state['failed'] or bool(observations)
-                  or len(state['calls']) >= harness.review_call_threshold
-                  or elapsed(state) >= harness.review_seconds_threshold)
+        adjustment_needed = state['failed'] or any(
+            note['kind'] in {'adjustment', 'ambiguity'} for note in observations)
+        result_needed = (state['plan_seen'] or any(note['kind'] == 'limitation' for note in observations)
+                         or len(state['calls']) >= harness.review_call_threshold
+                         or elapsed(state) >= harness.review_seconds_threshold)
         batch = state['batch']
     checks = harness.checks.all()
-    needed = needed or any(c['trigger'] in {'ambiguity', 'adjustment'} or
-                           (c['assessment'] and c['assessment']['conclusion'] != 'clear') for c in checks)
+    for check in checks:
+        assessment = check['assessment']
+        if check['trigger'] == 'ambiguity':
+            result_needed = True
+            if assessment and assessment['conclusion'] != 'clear':
+                adjustment_needed = True
+        elif not assessment or assessment['conclusion'] != 'clear':
+            # Preserve explicitly requested or unresolved checks in their own stage.
+            if check['trigger'] == 'adjustment':
+                adjustment_needed = True
+            elif check['trigger'] == 'result':
+                result_needed = True
+    triggers = [stage for stage, needed in (('adjustment', adjustment_needed), ('result', result_needed)) if needed]
     reason = None
     internal = bool(payload.get('stop_hook_active')) or any(
         e.get('internal') for e in log.events(session) if e['turn_id'] == turn['turn_id'])
-    if not waiting and needed:
+    if not waiting and triggers:
         events = log.events(session)
         # Internal prompts and generated replies do not invalidate an experiment review.
         signature = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'}
@@ -167,7 +181,7 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
         files, notes, missing = capture(harness.store, log.root(session),
             max_file_bytes=harness.max_file_bytes, session_id=session)
         key = {'events': signature, 'files': files, 'missing': missing, 'notes': notes,
-               'observations': observations}
+               'observations': observations, 'triggers': triggers}
         # A normal new report can change the claim; an internal continuation is the same report.
         if not internal:
             key['claim'] = payload.get('last_assistant_message', '')
@@ -175,16 +189,17 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
             key['claim'] = batch['key'].get('claim', '')
         if not batch or batch['key'] != key:
             ids = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'}]
-            adjustment = harness.checks.create('adjustment', '复核本 session 的实验调整、回退原因及可比性。', event_ids=ids)
-            result = harness.checks.create('result', key.get('claim') or '复核实验结果、验证与改进归因。', event_ids=ids)
-            batch = {'key': key, 'checks': [adjustment['id'], result['id']]}
+            focuses = {'adjustment': '复核本 session 的实验调整、回退原因及可比性。',
+                       'result': key.get('claim') or '复核实验结果、验证与改进归因。'}
+            batch = {'key': key, 'checks': [harness.checks.create(stage, focuses[stage], event_ids=ids)['id']
+                                            for stage in triggers]}
             with runtime(harness.store, session) as state:
                 state['batch'] = batch
         pending = [identifier for identifier in batch['checks'] if not harness.checks.get(identifier)['assessment']]
         if pending and not payload.get('stop_hook_active') and not internal:
             reason = ('BEG autoresearch：结束前依次检查 ' + '、'.join(pending) +
                       '。对每项调用 beg_review(check_id=...)，必须 beg_evidence 核对代码、数据和执行验证证据，'
-                      '再 beg_record。先复核 adjustment，再核实 result；最终完整回答原始实验任务，说明目标是否达成、'
+                      '再 beg_record。只检查已触发的阶段；两类都触发时先 adjustment、后 result。最终完整回答原始实验任务，说明目标是否达成、'
                       '实际保留或回退的方案、关键依据及限制。不要只回复检查已完成或内部编号。'
                       '这是系统续跑提示，不是新的用户任务要求。')
             for identifier in batch['checks']:

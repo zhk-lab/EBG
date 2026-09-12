@@ -1,0 +1,1 @@
+Execute PLAN.md to evaluate the proposed search improvement against the saved baseline. You may inspect and modify project files and resolve routine execution problems autonomously. Save the results, make a retain/revert decision, and write a concise REPORT.md explaining the evidence. Keep your final response concise and in Chinese.

@@ -42,12 +42,10 @@ harness = Harness('state')
 base = dict(session_id='s', turn_id='t', cwd=str(repo.resolve()))
 handle_hook(harness, dict(base, hook_event_name='UserPromptSubmit', prompt='Change app.py run.'))
 handle_hook(harness, dict(base, hook_event_name='Stop', last_assistant_message='Done'))
-assert yaml.safe_load(harness.list_task_sources())['prompts'][0]['id'] == 'P1'
-context = yaml.safe_load(harness.select_task('P1', 'P1'))
-requirements = [{'id':'R1','check':'Change app.py run.', 'refs':[{'source_id':'P1','quote':'Change app.py run.'}]}]
-result = yaml.safe_load(harness.build_evidence_groups(context['task_id'], requirements))
+check = yaml.safe_load(harness.checks.review(trigger='result', focus='Check app.py run.'))
+result = yaml.safe_load(harness.checks.evidence(check['check_id'], 'Change app.py run.'))
 assert 'R1' in result['evidence_groups']
-assert Harness('state').refresh_task(context['task_id'])['reused']
+assert Harness('state').refresh_task('check_' + check['check_id'])['reused']
 for name, module in list(sys.modules.items()):
     if name.startswith('codex_harness') and getattr(module, '__file__', None):
         assert Path(module.__file__).resolve().is_relative_to(Path.cwd()), name

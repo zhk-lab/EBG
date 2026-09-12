@@ -2,6 +2,8 @@
 
 面向 autoresearch 的独立 BEG 应用：Hook 记录实验过程并触发阶段审查，每项审查必须调用 beg_evidence，核对数据隔离、实验可比性和结论归因。审查工具不修改目标代码、不运行实验。
 
+阅读入口：[流程与案例](BEG_disclose_harness.md)、[四个 Skill 中文译文](四个Skill中文译文.md)、[案例运行说明](../harness_case_study/README.md)。运行用 Skill 位于 `src/codex_harness/skills/`，包含一个总入口和三个阶段。
+
 | 工具 | 作用 |
 |---|---|
 | `beg_review` | 创建或读取检查点，返回相关要求、执行记录、拟作出的声明或决定和检查条目；不默认查询代码 |
@@ -20,9 +22,9 @@ python -m venv .venv
 
 三个阶段：Plan 执行前的 `ambiguity`、结束时的 `adjustment` 和 `result`。授权内的调整先记录、汇报时统一披露；需要用户决定的关键取舍在落实前提问。总 Skill 负责流程，分阶段清单明确 autoresearch 的数据、实验及归因检查要求。
 
-两个审查信号：读取待执行 Plan 后的 `PostToolUse` 提醒 ambiguity；`Stop` 依次触发 adjustment/result。自动识别限于明确执行请求和 Read/read_file 或常见 shell 读取命令；未识别的意图由 Codex 主动调用 beg_review(trigger="ambiguity")。Plan 已在上下文时直接提醒。
+两个审查信号：读取待执行 Plan 后的 `PostToolUse` 提醒 ambiguity；`Stop` 分别判断 adjustment/result，仅检查已触发的阶段；同时触发时先 adjustment、后 result。自动识别限于明确执行请求和 Read/read_file 或常见 shell 读取命令；未识别的意图由 Codex 主动调用 beg_review(trigger="ambiguity")。Plan 已在上下文时直接提醒。
 
-工具失败与验证结束只记录，不立即审查。按 session 累计：执行 Plan、调用达到 10 次、活动耗时达到 300 秒、工具失败或重要过程事项，任一条件满足即在 Stop 审查。可用 `--review-call-threshold`、`--review-seconds-threshold` 配置，setup 同步写入 MCP 与 Hook 参数。排除 Harness 自身调用、重复事件和回合间闲置；恢复进程不计断开时间。已审查且内容未变则复用。
+工具失败与验证结束只记录，不立即审查。Stop 按 session 累计条件分别判断：result 在执行过 Plan、调用达到 10 次、活动耗时达到 300 秒或记录了结果限制时触发；adjustment 在出现工具失败、记录了关键歧义或重要调整时触发。无问题的 ambiguity 检查不触发 adjustment。可用 `--review-call-threshold`、`--review-seconds-threshold` 配置，setup 同步写入 MCP 与 Hook 参数。排除 Harness 自身调用、重复事件和回合间闲置；恢复进程不计断开时间。已审查且内容未变则复用。
 
 ```text
 beg_review(trigger="result", focus="准备采用本轮提升结果")
@@ -35,11 +37,11 @@ beg_review(trigger="result", focus="准备采用本轮提升结果")
 
 Hook 已给出 check_id 时直接读取，不重新创建。每个检查点固定触发时的事件截止位置、Repo 文本与未采集文件信息，并保留此前快照。指定 event_ids 时返回完整调用／结果配对；歧义检查补充相关轮次。无关联时采用当前轮次，完整 Trace 和 Markdown 候选可将 all_trace／all_sources 的引用交给 beg_evidence 展开。保留会话中较早的用户原文，避免遗漏约束；其中可能混有其他任务，由 Codex 判断适用范围，Harness 不自动推断任务边界或 Plan 身份。
 
-MCP 仅暴露上述三个接口，材料展开统一使用 `beg_evidence`。更新后重新生成并同步 Skill，重启 MCP 连接以加载新接口。已有历史评测轨迹保留当时的接口名称。
+仅支持 `ambiguity / adjustment / result` 检查点流程，材料展开统一使用 `beg_evidence`。旧的 Prompt 区间选择、Plan-only 审查入口及 `prompts/disclose.md` 已移除；证据响应使用检查点提示词。更新后重启 MCP 连接，旧模式的任务记录不能继续查询，需通过 `beg_review` 创建检查点。
 
 读取不等于完成检查。beg_record 在没有成功执行 beg_evidence 问题查询时拒绝保存判断；仅翻阅 review 分页不算取证。程序不保证证据充分或结论正确，必须结合清单判断。相同焦点、事件和采集状态可复用；变化则新建检查点。二进制内容未采集，不能声称已验证其一致。
 
-执行中用 `beg_record(note_kind="adjustment"或"limitation", decision_status="proposed"或"executed", summary=原因及影响)` 保存未审查事项，不传 check_id/conclusion。结束审查读取这些记录，再通过证据形成判断。
+执行中用 `beg_record(note_kind="adjustment"、"ambiguity"或"limitation", decision_status="proposed"或"executed", summary=原因及影响)` 分别记录重要调整、关键歧义或结果限制，不传 check_id/conclusion。结束审查读取这些记录，再通过证据形成判断。
 
 需要澄清时，取证后用 `beg_record(check_id=..., conclusion="uncertain", summary=问题与影响, waiting_for_user=true)`，立即提问并结束回答。Stop 对待澄清状态放行。真实用户答复解决问题后，用原 check_id 和 `resolution=答复如何解决问题` 清除状态；仅收到新消息不会自动清除。
 

@@ -19,7 +19,6 @@ from .evidence_intake import validate_evidence
 
 
 REPO_RELATIONS = {"calls", "feeds"}
-TRACE_RELATIONS = {"informs", "supersedes"}
 STATE_MUTATORS = {
     "add", "append", "clear", "discard", "extend", "insert", "pop",
     "remove", "setdefault", "sort", "update",
@@ -424,251 +423,188 @@ def _build_repo_edges(
     return drafts
 
 
-def _build_trace_edges(
-    index: _EvidenceIndex,
-    behaviors: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    chronological = sorted(
-        behaviors,
-        key=lambda item: (
-            int(item["start_turn"]), int(item["end_turn"]), str(item["behavior_id"])
-        ),
+def _trace_keys(content: str) -> set[str]:
+    """Extract explicit typed IDs and object URLs, not commands or shared paths."""
+    pattern = re.compile(
+        r"\b(task|job|run|execution|trial|shard)"
+        r"(?:[_ ]+id[\s\"':=#`]*|[\"']\s*:\s*[\"']?|\s*[:=#-]\s*|\s+(?=\d))"
+        r"([A-Za-z0-9][A-Za-z0-9_.-]*)\b", re.IGNORECASE,
     )
-    support_by_task: dict[str, list[str]] = defaultdict(list)
-    task_first_position: dict[str, int] = {}
-    for position, behavior in enumerate(chronological):
-        task_id = str(behavior["task_id"])
-        task_first_position.setdefault(task_id, position)
-        support_by_task[task_id].extend(behavior["action_evidence_ids"])
-        support_by_task[task_id].extend(
-            item["evidence_id"] for item in behavior["response_refs"]
-        )
-
-    drafts: dict[tuple[str, str, str], tuple[str, str]] = {}
-    for target_position, target_behavior in enumerate(chronological):
-        target_task_id = str(target_behavior["task_id"])
-        for demand_ref in target_behavior["demand_refs"]:
-            demand_id = str(demand_ref["evidence_id"])
-            demand = str(index.by_id[demand_id]["content"])
-            for relation, stable_key in _trace_relation_candidates(demand):
-                owners: dict[str, list[str]] = defaultdict(list)
-                for owner_task_id, evidence_ids in support_by_task.items():
-                    if (
-                        owner_task_id == target_task_id
-                        or task_first_position[owner_task_id] >= target_position
-                    ):
-                        continue
-                    owners[owner_task_id].extend(
-                        evidence_id
-                        for evidence_id in evidence_ids
-                        if stable_key in _trace_stable_keys(
-                            str(index.by_id[evidence_id]["content"])
-                        )
-                    )
-                owners = {
-                    task_id: index.sorted(evidence_ids)
-                    for task_id, evidence_ids in owners.items()
-                    if evidence_ids
-                }
-                if len(owners) != 1:
-                    continue
-                owner_task_id, owner_evidence = next(iter(owners.items()))
-                if relation == "informs":
-                    source_task_id, destination_task_id = owner_task_id, target_task_id
-                else:
-                    source_task_id, destination_task_id = target_task_id, owner_task_id
-                identity = (source_task_id, relation, destination_task_id)
-                support_pair = (owner_evidence[-1], demand_id)
-                previous = drafts.get(identity)
-                if previous is None or tuple(
-                    index.order[item] for item in support_pair
-                ) < tuple(index.order[item] for item in previous):
-                    drafts[identity] = support_pair
-    return [
-        {
-            "edge_id": f"R{number:04d}",
-            "source_task_id": source_task_id,
-            "target_task_id": target_task_id,
-            "type": relation,
-            "evidence_ids": index.sorted(
-                drafts[(source_task_id, relation, target_task_id)]
-            ),
-        }
-        for number, (source_task_id, relation, target_task_id) in enumerate(
-            sorted(drafts), start=1
-        )
-    ]
-
-
-_INFORMS_SIGNAL = re.compile(
-    r"\b(?:use|using|reuse|reusing|based\s+on|apply|applying)\b|"
-    r"(?:使用|复用|基于|沿用|应用)",
-    re.IGNORECASE,
-)
-_SUPERSEDES_SIGNAL = re.compile(
-    r"\b(?:stop|cancel|revert|replace|supersede|instead\s+of)\b|"
-    r"(?:停止|取消|撤销|回滚|替换|改用)",
-    re.IGNORECASE,
-)
-_TRACE_URL = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
-_TRACE_PATH = re.compile(
-    r"(?<![\w.-])(?:[A-Za-z]:[\\/]|\.{0,2}[\\/]|[A-Za-z0-9_.-]+[\\/])"
-    r"(?:[A-Za-z0-9_.-]+[\\/])*[A-Za-z0-9_.-]+"
-)
-_TRACE_NUMBERED_REFERENCE = re.compile(
-    r"\b(?:issue|pr|pull\s+request)\s*#?\s*\d+\b|(?<!\w)#\d+\b",
-    re.IGNORECASE,
-)
-_TRACE_NAMED_ID = re.compile(
-    r"\b(?:task|job|run|execution|trial|shard)\s*"
-    r"(?:id|number|no\.?|#)?\s*[:=#-]?\s*"
-    r"([A-Za-z0-9][A-Za-z0-9_.:-]*\d[A-Za-z0-9_.:-]*)\b",
-    re.IGNORECASE,
-)
-_TRACE_BRANCH = re.compile(
-    r"\bbranch\s+(?:named\s+)?[`'\"]?([A-Za-z0-9][A-Za-z0-9._/-]+)[`'\"]?",
-    re.IGNORECASE,
-)
-_TRACE_QUOTED = re.compile(r"`([^`\r\n]+)`|\"([^\"\r\n]+)\"|'([^'\r\n]+)'")
-_TRACE_CLAUSE_SPLIT = re.compile(
-    r"(?<=[!?;。！？；])|(?<=\.)\s+(?=[A-Z])|[\r\n]+"
-)
-
-
-def _trace_relation_candidates(content: str) -> set[tuple[str, str]]:
-    candidates: set[tuple[str, str]] = set()
-    for clause in _TRACE_CLAUSE_SPLIT.split(content):
-        for signal in _SUPERSEDES_SIGNAL.finditer(clause):
-            tail = _relation_object_tail(clause[signal.end():])
-            stable_keys = _trace_stable_keys(tail)
-            verb = signal.group(0).casefold()
-            if verb in {"stop", "cancel", "停止", "取消"}:
-                stable_keys = {
-                    key
-                    for key in stable_keys
-                    if key.startswith(("id:", "ref:", "branch:"))
-                }
-            candidates.update(("supersedes", key) for key in stable_keys)
-        for signal in _INFORMS_SIGNAL.finditer(clause):
-            prefix = clause[max(0, signal.start() - 8):signal.start()].casefold()
-            if re.search(r"(?:avoid|without|not|don't|do\s+not)\s*$", prefix):
-                continue
-            tail = _relation_object_tail(clause[signal.end():])
-            candidates.update(
-                ("informs", stable_key)
-                for stable_key in _trace_stable_keys(tail)
-            )
-    return candidates
-
-
-def _relation_object_tail(value: str) -> str:
-    boundary = re.search(r"\b(?:and|then|but)\b|[,，;；]", value, re.IGNORECASE)
-    if boundary is not None:
-        value = value[:boundary.start()]
-    return value[:180]
-
-
-def _trace_stable_keys(content: str) -> set[str]:
-    keys: set[str] = set()
-    for match in _TRACE_URL.finditer(content):
-        keys.add(f"url:{_normalize_trace_key(match.group(0))}")
-    path_content = _TRACE_URL.sub(lambda match: " " * len(match.group(0)), content)
-    for match in _TRACE_PATH.finditer(path_content):
-        path = _normalize_trace_key(match.group(0))
-        if "." in path.rsplit("/", 1)[-1]:
-            keys.add(f"path:{path}")
-    for match in _TRACE_NUMBERED_REFERENCE.finditer(content):
-        keys.add(f"ref:{_normalize_trace_key(match.group(0))}")
-    for match in _TRACE_NAMED_ID.finditer(content):
-        keys.add(f"id:{_normalize_trace_key(match.group(1))}")
-    for match in _TRACE_BRANCH.finditer(content):
-        keys.add(f"branch:{_normalize_trace_key(match.group(1))}")
-    for match in _TRACE_QUOTED.finditer(content):
-        value = next(group for group in match.groups() if group is not None).strip()
-        if len(value) >= 12 and (
-            len(value.split()) >= 3 or any(ord(character) > 127 for character in value)
+    keys = {
+        f"{match[1].lower()}:{match[2]}"
+        for match in pattern.finditer(content)
+        if not match[2].isdigit() and any(character.isdigit() for character in match[2])
+    }
+    for match in re.finditer(r"\bcommit[\s\"':=`*]+([0-9a-f]{7,40})\b", content, re.I):
+        keys.add(f"commit:{match[1].lower()}")
+    # Object-specific URLs carry identity; generic repository URLs do not.
+    for match in re.finditer(r"https?://[^\s<>\"']+", content):
+        url = match[0].rstrip(".,;:!?)]}")
+        if re.search(r"#(?:issuecomment|discussion_r|pullrequestreview)-\d+$", url) or re.search(
+            r"/(?:commit/[0-9a-f]{7,40}|actions/runs/\d+)(?:[/?#]|$)", url
         ):
-            keys.add(f"quote:{_normalize_trace_key(value)}")
+            keys.add(f"url:{url}")
     return keys
 
 
-def _normalize_trace_key(value: str) -> str:
-    return (
-        value.strip(" \t\r\n.,;:!?)]}。；：！？）】")
-        .replace("\\", "/")
-        .casefold()
-    )
+def _trace_output(item: dict[str, Any]) -> str:
+    if item["locator"]["event_type"] == "assistant_response":
+        return str(item["content"])
+    if item["locator"]["event_type"] == "tool_exchange":
+        _, separator, result = str(item["content"]).partition("Tool result:")
+        return result if separator else ""
+    return ""
+
+
+def _trace_reference_text(item: dict[str, Any]) -> str:
+    content = str(item["content"])
+    if item["locator"]["event_type"] == "tool_exchange":
+        # Repeated identifiers in results/logs do not demonstrate a reference.
+        return content.partition("Tool result:")[0]
+    return content
+
+
+def _normalized_reference(text: str) -> str:
+    return " ".join(text.casefold().split())
+
+
+def _structural_support(
+    request: str, prior: list[tuple[str, str, str]],
+    recent: list[tuple[str, str, str]],
+) -> list[tuple[str, str]]:
+    """Resolve explicit quotations and item labels without topic/verb matching."""
+    matches: list[tuple[str, str]] = []
+    quotes = [next(value for value in groups if value) for groups in
+              re.findall(r'"([^"\n]{20,})"|“([^”\n]{20,})”', request)]
+    quotes.extend(re.findall(r"(?m)^\s*>\s?(.{20,})$", request))
+    for quote in quotes:
+        quote = _normalized_reference(quote)
+        # Single code/path tokens are object mentions, not quoted propositions.
+        if not re.search(r"\s|[\u3400-\u9fff]", quote):
+            continue
+        candidates = [(task, eid) for task, eid, text in prior
+                      if quote in _normalized_reference(text)]
+        if len({task for task, _ in candidates}) == 1:
+            matches.append(candidates[-1])
+
+    labels = set()
+    for match in re.finditer(
+        r"\b(?:item|option|point)\s+#?(\d+|[A-Z])\b"
+        r"|第\s*(\d+)\s*[项条点]"
+        r"|(?<!\w)#(\d+)\b", request, re.I,
+    ):
+        # Issue/PR numbers have repository scope, not local list scope.
+        if re.search(r"\b(?:issue|pr|pull request)\s*$", request[:match.start()], re.I):
+            continue
+        labels.add(next(value for value in match.groups() if value).upper())
+    bare_label = re.fullmatch(r"\s*([0-9]+|[A-Z])[.)]?\s*", request, re.I)
+    if bare_label:
+        labels.add(bare_label[1].upper())
+    for label in sorted(labels):
+        item_pattern = re.compile(
+            rf"(?:^|\n)\s*(?:[-*]\s*)?(?:\*\*)?{re.escape(label)}[.)、]"
+            rf"|(?:^|\n)\s*\|\s*(?:\*\*)?{re.escape(label)}(?:\*\*)?\s*\|"
+            rf"|\boption\s+{re.escape(label)}\b", re.I,
+        )
+        candidates = [(task, eid) for task, eid, text in recent
+                      for _ in item_pattern.finditer(text)]
+        # Repeated label occurrences can refer to distinct lists, even in one task.
+        if len(candidates) == 1:
+            matches.append(candidates[0])
+    return matches
+
+
+def _build_trace_edges(
+    index: _EvidenceIndex, behaviors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    task_evidence: dict[str, set[str]] = defaultdict(set)
+    contents: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for behavior in behaviors:
+        task = str(behavior["task_id"])
+        ids = task_evidence[task]
+        ids.update(behavior["action_evidence_ids"])
+        for evidence_id in behavior["action_evidence_ids"]:
+            contents[task, evidence_id].append(str(index.by_id[evidence_id]["content"]))
+        for field in ("demand_refs", "response_refs"):
+            for ref in behavior[field]:
+                evidence_id = ref["evidence_id"]
+                ids.add(evidence_id)
+                content = str(index.by_id[evidence_id]["content"])
+                start, end = ref.get("char_range", (0, len(content)))
+                contents[task, evidence_id].append(content[start:end])
+
+    def position(evidence_id: str) -> tuple[int, int]:
+        locator = index.by_id[evidence_id]["locator"]
+        return int(locator["turn"]), int(locator["event_index"])
+
+    first = {task: min(ids, key=position) for task, ids in task_evidence.items()}
+    groups: dict[tuple[int, int], list[str]] = defaultdict(list)
+    for task, evidence_id in first.items():
+        groups[position(evidence_id)].append(task)
+    drafts: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    ordered = sorted(groups)
+    for earlier, later in zip(ordered, ordered[1:]):
+        # A simultaneous start has no uniquely determined adjacent task.
+        if len(groups[earlier]) == len(groups[later]) == 1:
+            source, target = groups[earlier][0], groups[later][0]
+            drafts[source, "precedes", target].update((first[source], first[target]))
+    records = []
+    for task, ids in task_evidence.items():
+        for evidence_id in index.sorted(ids):
+            item = {**index.by_id[evidence_id], "content": "\n".join(contents[task, evidence_id])}
+            records.append((task, evidence_id, item))
+    records.sort(key=lambda record: (position(record[1]), record[0]))
+    output_index: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for owner, eid, other in records:
+        for key in _trace_keys(_trace_output(other)):
+            output_index[key].append((owner, eid))
+    for task, evidence_id, item in records:
+        request = _trace_reference_text(item)
+        # Assistant repetition alone is not an explicit reference operation.
+        keys = _trace_keys(request) if item["locator"]["event_type"] != "assistant_response" else set()
+        prior = [(owner, eid, other) for owner, eid, other in records
+                 if position(eid) < position(evidence_id)]
+        for key in keys:
+            candidates = [(owner, eid) for owner, eid in output_index.get(key, [])
+                          if position(eid) < position(evidence_id)]
+            # Without an explicit recency pointer, multiple source tasks are ambiguous.
+            if len({owner for owner, _ in candidates}) == 1:
+                owner, source_id = candidates[-1]
+                if owner != task:
+                    drafts[task, "references", owner].update((source_id, evidence_id))
+        if item["locator"]["event_type"] == "user_prompt":
+            # Numbered replies refer to the preceding response, not an
+            # unrelated old list. Explicit quotations can reach farther back.
+            prior_responses = [(owner, eid, str(other["content"]))
+                               for owner, eid, other in prior
+                               if other["locator"]["event_type"] == "assistant_response"]
+            last_user = max((position(eid) for _, eid, other in prior
+                             if other["locator"]["event_type"] == "user_prompt"),
+                            default=(-1, -1))
+            recent = [record for record in prior_responses if position(record[1]) > last_user]
+            for owner, source_id in _structural_support(request, prior_responses, recent):
+                source_tasks = {other_task for other_task, eid, _ in prior_responses if eid == source_id}
+                if owner != task and source_tasks == {owner}:
+                    drafts[task, "references", owner].update((source_id, evidence_id))
+    return [
+        {
+            "edge_id": f"R{number:04d}",
+            "source_task_id": source,
+            "target_task_id": target,
+            "type": relation,
+            "evidence_ids": index.sorted(drafts[source, relation, target]),
+        }
+        for number, (source, relation, target) in enumerate(sorted(drafts), 1)
+    ]
 
 
 def _validate_trace_edges(
     evidence_by_id: dict[str, dict[str, Any]],
-    behaviors: list[dict[str, Any]],
-    edges: list[dict[str, Any]],
+    behaviors: list[dict[str, Any]], edges: list[dict[str, Any]],
 ) -> None:
-    task_ids = {str(behavior["task_id"]) for behavior in behaviors}
-    source_support: dict[str, set[str]] = defaultdict(set)
-    target_demands: dict[str, set[str]] = defaultdict(set)
-    for behavior in behaviors:
-        task_id = str(behavior["task_id"])
-        source_support[task_id].update(behavior["action_evidence_ids"])
-        source_support[task_id].update(
-            item["evidence_id"] for item in behavior["response_refs"]
-        )
-        target_demands[task_id].update(
-            demand_ref["evidence_id"] for demand_ref in behavior["demand_refs"]
-        )
-    identities: list[tuple[str, str, str]] = []
-    for edge in edges:
-        if set(edge) != {
-            "edge_id", "source_task_id", "target_task_id", "type", "evidence_ids"
-        }:
-            raise RelationError("Trace relation has an unexpected field")
-        if edge["type"] not in TRACE_RELATIONS:
-            raise RelationError("Trace relation type is invalid")
-        source = edge["source_task_id"]
-        target = edge["target_task_id"]
-        if source not in task_ids or target not in task_ids or source == target:
-            raise RelationError("Trace relation endpoint is not a distinct known task")
-        evidence_ids = edge["evidence_ids"]
-        if (
-            not isinstance(evidence_ids, list)
-            or len(evidence_ids) != 2
-            or len(evidence_ids) != len(set(evidence_ids))
-            or any(evidence_id not in evidence_by_id for evidence_id in evidence_ids)
-        ):
-            raise RelationError("Trace relation requires unique, known Evidence")
-        if any(
-            evidence_by_id[evidence_id]["source_type"] != "trace"
-            for evidence_id in evidence_ids
-        ):
-            raise RelationError("Trace relation Evidence has the wrong source type")
-        evidence_set = set(evidence_ids)
-        owner_task = source if edge["type"] == "informs" else target
-        statement_task = target if edge["type"] == "informs" else source
-        owner_ids = evidence_set & source_support[owner_task]
-        statement_ids = evidence_set & target_demands[statement_task]
-        if len(owner_ids) != 1 or len(statement_ids) != 1:
-            raise RelationError(
-                "Trace relation requires one owner and one statement Evidence"
-            )
-        owner_id = next(iter(owner_ids))
-        statement_id = next(iter(statement_ids))
-        owner_keys = _trace_stable_keys(str(evidence_by_id[owner_id]["content"]))
-        candidates = _trace_relation_candidates(
-            str(evidence_by_id[statement_id]["content"])
-        )
-        if not any(
-            relation == edge["type"] and stable_key in owner_keys
-            for relation, stable_key in candidates
-        ):
-            raise RelationError(
-                "Trace relation lacks matching signal and stable identity"
-            )
-        identities.append((str(source), str(edge["type"]), str(target)))
-    if len(identities) != len(set(identities)):
-        raise RelationError("Trace relations must be deduplicated")
-    if identities != sorted(identities):
-        raise RelationError("Trace relations are not deterministically ordered")
+    expected = _build_trace_edges(_EvidenceIndex(list(evidence_by_id.values())), behaviors)
+    if edges != expected:
+        raise RelationError("Trace edges do not match explicit references and task order")
 
 
 def _deduplicate_edges(

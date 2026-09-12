@@ -134,7 +134,7 @@ class GraphAssemblyTests(unittest.TestCase):
         }
         self.assertNotIn(graph["evidence"][0]["evidence_id"], referenced)
 
-    def test_trace_graph_preserves_supersedes_between_task_scopes(self) -> None:
+    def test_trace_graph_preserves_internal_task_edges(self) -> None:
         events = [
             {"event_type": "user_prompt", "turn_number": 1, "content": "Run it."},
             {
@@ -161,10 +161,11 @@ class GraphAssemblyTests(unittest.TestCase):
             graph = build_graph(bundle, evidence, behaviors, edges)
             VALIDATE_GRAPH(graph)
 
-        self.assertEqual(len(graph["edges"]), 1)
-        self.assertEqual(graph["edges"][0]["type"], "supersedes")
-        self.assertEqual(graph["edges"][0]["source_task_id"], "K0002")
-        self.assertEqual(graph["edges"][0]["target_task_id"], "K0001")
+        self.assertEqual(len(graph["edges"]), 2)
+        self.assertEqual(graph["edges"][0]["type"], "precedes")
+        self.assertEqual(graph["edges"][1]["type"], "references")
+        self.assertEqual(graph["edges"][1]["source_task_id"], "K0002")
+        self.assertEqual(graph["edges"][1]["target_task_id"], "K0001")
 
     def test_repo_with_no_observable_behavior_still_preserves_evidence(self) -> None:
         with ProjectTemporaryDirectory() as temporary:

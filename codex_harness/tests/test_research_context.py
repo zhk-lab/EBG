@@ -6,7 +6,7 @@ import unittest
 import yaml
 
 from codex_harness import Harness
-from tests.support import ProjectTemporaryDirectory
+from tests.support import ProjectTemporaryDirectory, checkpoint_task
 
 
 class ResearchContextTests(unittest.TestCase):
@@ -26,9 +26,8 @@ class ResearchContextTests(unittest.TestCase):
         (self.repo / name).write_text(json.dumps(value, indent=2), encoding='utf-8')
 
     def build(self):
-        listing = yaml.safe_load(self.harness.list_task_sources(repo_path=str(self.repo)))
-        plan = next(p['id'] for p in listing['plans'] if p['path'] == 'PLAN.md')
-        selected = yaml.safe_load(self.harness.select_task(plan_ids=[plan], repo_path=str(self.repo)))
+        selected = checkpoint_task(self.harness, repo=self.repo)
+        plan = next(s['id'] for s in selected['sources'] if s['kind'] == 'plan')
         self.task = selected['task_id']
         payload = yaml.safe_load(self.harness.build_evidence_groups(self.task, [{
             'id': 'R1', 'check': self.plan,

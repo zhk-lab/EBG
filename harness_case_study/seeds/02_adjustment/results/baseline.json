@@ -1,0 +1,133 @@
+{
+  "method": "random",
+  "backend": "reference",
+  "config": {
+    "seed": 1729,
+    "problems": 24,
+    "dimensions": 5,
+    "evaluations": 80
+  },
+  "mean_objective": 42.637384997209956,
+  "rows": [
+    {
+      "id": 0,
+      "objective": 28.654848393806375,
+      "evaluations": 80
+    },
+    {
+      "id": 1,
+      "objective": 37.84277947592074,
+      "evaluations": 80
+    },
+    {
+      "id": 2,
+      "objective": 41.25374723080403,
+      "evaluations": 80
+    },
+    {
+      "id": 3,
+      "objective": 40.83587423721039,
+      "evaluations": 80
+    },
+    {
+      "id": 4,
+      "objective": 33.75612977627394,
+      "evaluations": 80
+    },
+    {
+      "id": 5,
+      "objective": 40.3154899433651,
+      "evaluations": 80
+    },
+    {
+      "id": 6,
+      "objective": 23.26864152546741,
+      "evaluations": 80
+    },
+    {
+      "id": 7,
+      "objective": 48.50360310705577,
+      "evaluations": 80
+    },
+    {
+      "id": 8,
+      "objective": 39.89475881345115,
+      "evaluations": 80
+    },
+    {
+      "id": 9,
+      "objective": 46.33119904662021,
+      "evaluations": 80
+    },
+    {
+      "id": 10,
+      "objective": 54.549138029434566,
+      "evaluations": 80
+    },
+    {
+      "id": 11,
+      "objective": 38.01553179595701,
+      "evaluations": 80
+    },
+    {
+      "id": 12,
+      "objective": 47.81312447166501,
+      "evaluations": 80
+    },
+    {
+      "id": 13,
+      "objective": 45.60071051506808,
+      "evaluations": 80
+    },
+    {
+      "id": 14,
+      "objective": 47.32986826814837,
+      "evaluations": 80
+    },
+    {
+      "id": 15,
+      "objective": 39.24992389463055,
+      "evaluations": 80
+    },
+    {
+      "id": 16,
+      "objective": 56.724700069984586,
+      "evaluations": 80
+    },
+    {
+      "id": 17,
+      "objective": 42.87210601075692,
+      "evaluations": 80
+    },
+    {
+      "id": 18,
+      "objective": 41.03069468085875,
+      "evaluations": 80
+    },
+    {
+      "id": 19,
+      "objective": 48.91843181128594,
+      "evaluations": 80
+    },
+    {
+      "id": 20,
+      "objective": 51.936644062867586,
+      "evaluations": 80
+    },
+    {
+      "id": 21,
+      "objective": 41.583961246656074,
+      "evaluations": 80
+    },
+    {
+      "id": 22,
+      "objective": 40.638048533964145,
+      "evaluations": 80
+    },
+    {
+      "id": 23,
+      "objective": 46.37728499178624,
+      "evaluations": 80
+    }
+  ]
+}

@@ -10,7 +10,7 @@ from codex_harness import Harness
 from codex_harness.application.paging import child_ref
 from codex_harness.application.render import tokens
 from codex_harness.application.storage import HarnessError
-from tests.support import ProjectTemporaryDirectory
+from tests.support import ProjectTemporaryDirectory, checkpoint_task
 
 
 CODE = "class RetryClient:\n    def send(self, request):\n        for attempt in range(3):\n            try:\n                return self.transport.send(request)\n            except RuntimeError:\n                if attempt == 2:\n                    raise\n"
@@ -45,7 +45,7 @@ class HarnessTests(unittest.TestCase):
 
     def select(self):
         self.harness.sessions.stop('s', 't1', None)
-        context = yaml.safe_load(self.harness.select_task('P1', 'P1'))
+        context = checkpoint_task(self.harness)
         self.task = context['task_id']
         return context
 
@@ -80,7 +80,7 @@ class HarnessTests(unittest.TestCase):
         second = self.build()
         self.assertNotEqual(ref, second['read_ref'])
         self.assertEqual(self.read(ref), payload)
-        self.assertIn('R2', self.read(ref)['requirements'])
+        self.assertIn('R2', self.read(ref)['questions'])
         self.assertNotIn('NEW LIVE CODE', json.dumps(second))
 
     def test_incremental_graph_and_output_survive_restart(self):
@@ -117,8 +117,8 @@ class HarnessTests(unittest.TestCase):
         self.harness.sessions.stop('s', 't1', None)
         self.harness.sessions.start('s', 't2', str(self.repo), 'Preserve compatibility.')
         self.harness.sessions.stop('s', 't2', None)
-        self.task = yaml.safe_load(self.harness.select_task('P2', 'P2'))['task_id']
-        self.requirements = [{'id': 'R1', 'check': 'Compatibility of src/retry.py RetryClient.send',
+        self.task = checkpoint_task(self.harness)['task_id']
+        self.requirements = [{'id': 'R1', 'check': 'Preserve compatibility.',
                               'refs': [{'source_id': 'P2', 'quote': 'compatibility'}]}]
         group = self.build()['evidence_groups']['R1']
         self.assertNotIn('actual', group)
@@ -145,7 +145,7 @@ class HarnessTests(unittest.TestCase):
         self.harness.sessions.stop('s', 't1', None)
         self.harness.sessions.start('s', 't2', str(self.repo), 'Users read the document')
         self.harness.sessions.stop('s', 't2', None)
-        task = yaml.safe_load(self.harness.select_task('P2', 'P2'))['task_id']
+        task = checkpoint_task(self.harness)['task_id']
         result = yaml.safe_load(self.harness.build_evidence_groups(task, [
             {'id': 'R1', 'check': 'Preserve reading',
              'refs': [{'source_id': 'P2', 'quote': 'Users read the document'}]}]))
@@ -188,7 +188,7 @@ class HarnessTests(unittest.TestCase):
         prompt = 'Implement src/retry.py::send to return 2.'
         self.harness.sessions.start('s', 't2', str(self.repo), prompt)
         self.harness.sessions.stop('s', 't2', None)
-        task = yaml.safe_load(self.harness.select_task('P2', 'P2'))['task_id']
+        task = checkpoint_task(self.harness)['task_id']
         result = yaml.safe_load(self.harness.build_evidence_groups(task, [
             {'id': 'R1', 'check': prompt, 'refs': [{'source_id': 'P2', 'quote': prompt}]}]))
         entries = result['evidence_groups']['R1']['actual']['repo']
@@ -272,7 +272,7 @@ class HarnessTests(unittest.TestCase):
         payload = self.build()
         self.harness.sessions.start('s', 't2', str(self.repo), 'Another task')
         self.harness.sessions.stop('s', 't2', 'Done')
-        other = yaml.safe_load(self.harness.select_task('P2', 'P2'))['task_id']
+        other = checkpoint_task(self.harness)['task_id']
         with self.assertRaises(HarnessError):
             self.harness.build_evidence_groups(other, read_ref=payload['read_ref'])
         self.assertEqual(self.read(payload['read_ref']), payload)
@@ -292,7 +292,7 @@ class HarnessTests(unittest.TestCase):
         self.assertLessEqual(tokens(raw), 256)
         page = yaml.safe_load(raw)
         root = page.get('root_ref', page['read_ref'])
-        checklist = self.read(child_ref(root, 'requirements'))
+        checklist = self.read(child_ref(root, 'questions'))
         self.assertEqual(checklist['R1'], self.requirements[0]['check'])
         linked = self.read(child_ref(full['read_ref'], 'changes'))
         self.assertEqual(linked['content']['read_ref'], full['changes']['read_ref'])

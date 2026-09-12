@@ -1,23 +1,20 @@
-"""Application service shared by MCP, lifecycle hooks and offline use."""
+"""Checkpoint evidence service shared by MCP and lifecycle hooks."""
 
 from __future__ import annotations
 
 import difflib
-import json
 from pathlib import Path
 from typing import Any
 
 from .matching import direct_repo_roots, explicit_symbol_match, literal_match, section_navigation, source_line_paths
 from .checks import Checks
-from .render import PROMPT
 from .paging import OutputPages
-from .repository import GRAPH_VERSION, capture, construct_graph, module_statement_span
+from .repository import GRAPH_VERSION, construct_graph, module_statement_span
 from .artifacts import linked_artifacts
 from .requirements import normalize_requirements
 from .research import research_context
 from .storage import HarnessError, Store
 from .sessions import SessionLog
-from .scoping import select_plan_task, select_task as make_scoped_task
 from .selection import compact_contexts, enclosing_contexts, share_repo_excerpts, value_contexts
 from .trace import build_trace, matched_events
 
@@ -41,71 +38,11 @@ class Harness:
     def pages(self) -> OutputPages:
         return OutputPages(self.store, self.token_budget)
 
-    def list_task_sources(self, session_id: str | None = None, *, read_ref: str | None = None,
-                          offset: int = 0, repo_path: str | None = None) -> str:
-        if read_ref and repo_path is not None:
-            raise HarnessError('Read a saved listing or collect current Plans, not both.')
-        session_id = (self.sessions.inspection_context(repo_path, session_id) if repo_path is not None
-                      else self.sessions.current(session_id))
-        owner = f"session:{session_id}"
-        if not read_ref:
-            if offset:
-                raise HarnessError("Use the read_ref returned with next to continue a listing.")
-            plans = [{k: v for k, v in p.items() if k not in {'file_id', 'snapshot_id'}}
-                     for p in self.sessions.plans(session_id)]
-            notes = []
-            if repo_path is not None:
-                files, notes, _ = capture(self.store, self.sessions.root(session_id),
-                                       max_file_bytes=self.max_file_bytes, session_id=session_id)
-                current = [{'id': f'L{file_id}', 'path': path, 'version': 'current'}
-                           for path, file_id in files.items() if Path(path).suffix.lower() in {'.md', '.markdown'}]
-                ids = {p['id'] for p in current}
-                plans = [p for p in plans if p['id'] not in ids] + current
-            read_ref = self.pages.save(owner, {
-                'session_id': session_id, 'prompts': self.sessions.prompts(session_id), 'plans': plans,
-                'note': 'Plan 列表为已保存的 Markdown 候选版本，请选择相关项；来源身份由原文确认。',
-                **({'collection_notes': notes} if notes else {}),
-            })
-        return self.pages.read(owner, read_ref, offset)
-
-    def select_task(self, start_prompt: str | None = None, end_prompt: str | None = None,
-                    plan_ids: list[str] | None = None, *, session_id: str | None = None,
-                    read_ref: str | None = None, offset: int = 0, repo_path: str | None = None) -> str:
-        if not read_ref:
-            if offset or bool(start_prompt) != bool(end_prompt):
-                raise HarnessError('Supply both start_prompt/end_prompt, or omit both for Plan-only inspection.')
-            if not start_prompt and not plan_ids:
-                raise HarnessError('Prompt and Plan cannot both be empty; select a Prompt range or at least one Plan.')
-        if repo_path is not None and (read_ref or start_prompt or end_prompt):
-            raise HarnessError('repo_path is only for current-code inspection, not historical selection or saved reads.')
-        session_id = (self.sessions.inspection_context(repo_path, session_id) if not read_ref and not start_prompt
-                      else self.sessions.current(session_id))
-        owner = f"selection:{session_id}"
-        if read_ref:
-            if start_prompt or end_prompt or plan_ids:
-                raise HarnessError("Read a saved selection or select a new interval, not both.")
-            return self.pages.read(owner, read_ref, offset)
-        task = (make_scoped_task(self.sessions, session_id, start_prompt, end_prompt, plan_ids or [])
-                if start_prompt else select_plan_task(self.sessions, session_id, plan_ids or []))
-        if not any(s['content'].strip() for s in task['sources']):
-            raise HarnessError('Prompt and Plan cannot both be empty.')
-        # Historical retries reuse their task/checklist; current-code selections capture anew.
-        with self.store.connect() as db:
-            existing = [json.loads(r[0]) for r in db.execute("SELECT data FROM tasks")]
-        previous = next((t for t in existing if t.get('scope') == task['scope']), None)
-        if previous:
-            task = previous
-        else:
-            self.store.put_task(task, new=True)
-        result = {'task_id': task['id'],
-                  'scope': {k: v for k, v in task['scope'].items() if k not in {'event_ids', 'session_id'}},
-                  'sources': task['sources']}
-        ref = self.pages.save(owner, result)
-        return self.pages.read(owner, ref)
-
     def build_evidence_groups(self, task_id: str, requirements: list[dict[str, Any]] | None = None,
                               *, read_ref: str | None = None, offset: int = 0) -> str:
         task = self.store.task(task_id)
+        if task['scope'].get('mode') != 'checkpoint':
+            raise HarnessError('Evidence requires a checkpoint; create one with beg_review.')
         self.sessions.current(task['scope']['session_id'])
         owner = f"evidence:{task_id}"
         if read_ref:
@@ -117,8 +54,6 @@ class Harness:
                 if not separator or view['task_id'] != task_id:
                     raise HarnessError("Evidence reference belongs to a different task.")
                 if material_id == 'changes':
-                    if view['scope'].get('mode') == 'current':
-                        raise HarnessError('Current-code inspection has no historical baseline or change list.')
                     value = [{'path': p, 'change': c, 'read_ref': f'{view_id}:diff:{p}'}
                              for p, c in view['changes'].items()]
                 else:
@@ -137,15 +72,9 @@ class Harness:
         refreshed = self.refresh_task(task_id)
         view = self.store.view(refreshed['view_id'])
         scope = view['scope']
-        if scope.get('mode') == 'current':
-            prompt = PROMPT + '\n本次按选定 Plan 核对选择时保存的当前 Repo，不自动关联历史 Trace。已有初始材料、实验记录和汇报可按其来源身份核对；历史材料缺失不自动构成任务违规，不逐条重复未运行或未完成的疑问。'
-        elif scope.get('mode') == 'checkpoint':
-            prompt = ('根据引用原文核对具体疑问；疑问不是用户要求，也不是已证实的问题。'
-                      '代码来自触发时保存的快照，Trace 截至该检查点；匹配仅表示相关。'
-                      '只有影响任务结论或后续决策的问题才需要披露。未采集不等于不存在，静态代码不证明执行。')
-        else:
-            prompt = (PROMPT + f"\n任务范围：{scope['start_prompt']}～{scope['end_prompt']}；"
-                      f"Repo：{scope['repo_before']} → {scope['repo_after']}。")
+        prompt = ('根据引用原文核对具体疑问；疑问不是用户要求，也不是已证实的问题。'
+                  '代码来自触发时保存的快照，Trace 截至该检查点；匹配仅表示相关。'
+                  '只有影响任务结论或后续决策的问题才需要披露。未采集不等于不存在，静态代码不证明执行。')
         notes = view['collection_notes'] + view['graph_notes']
         if notes:
             prompt += '\n采集限制：' + '；'.join(notes)
@@ -160,26 +89,25 @@ class Harness:
             },
         }
         share_repo_excerpts(payload['evidence_groups'])
-        if scope.get('mode') == 'checkpoint':
-            payload['check_id'] = scope['check_id']
-            payload['questions'] = payload.pop('requirements')
-            for group in payload['evidence_groups'].values():
-                group['cited_sources'] = group.pop('requirement')
-            check = self.checks.get(scope['check_id'])
-            selected = set(check['selected_plans'])
-            seeds = [(s.get('path', ''), s['content']) for s in view['sources'] if s['id'] in selected]
-            anchors = set(check['anchors'])
-            calls = {e.get('call_id') for e in check['events'] if e['id'] in anchors}
-            seeds = [('', e['content']) for e in check['events'] if e['kind'] == 'tool_result'
-                     and (e.get('call_id') in calls if anchors else e['turn_id'] == check['turn_id'])] + seeds
-            seeds.extend(('', ref['content']) for r in view['requirements'] for ref in r['refs'])
-            for group in payload['evidence_groups'].values():
-                for entry in group.get('actual', {}).get('repo', []):
-                    path = entry['source'].split(':', 1)[-1].split('::', 1)[0]
-                    seeds.append((path if path in view['files'] else '', entry.get('content', '')))
-            linked = linked_artifacts(self.store, view, seeds)
-            if linked:
-                payload['linked_artifacts'] = linked
+        payload['check_id'] = scope['check_id']
+        payload['questions'] = payload.pop('requirements')
+        for group in payload['evidence_groups'].values():
+            group['cited_sources'] = group.pop('requirement')
+        check = self.checks.get(scope['check_id'])
+        selected = set(check['selected_plans'])
+        seeds = [(s.get('path', ''), s['content']) for s in view['sources'] if s['id'] in selected]
+        anchors = set(check['anchors'])
+        calls = {e.get('call_id') for e in check['events'] if e['id'] in anchors}
+        seeds = [('', e['content']) for e in check['events'] if e['kind'] == 'tool_result'
+                 and (e.get('call_id') in calls if anchors else e['turn_id'] == check['turn_id'])] + seeds
+        seeds.extend(('', ref['content']) for r in view['requirements'] for ref in r['refs'])
+        for group in payload['evidence_groups'].values():
+            for entry in group.get('actual', {}).get('repo', []):
+                path = entry['source'].split(':', 1)[-1].split('::', 1)[0]
+                seeds.append((path if path in view['files'] else '', entry.get('content', '')))
+        linked = linked_artifacts(self.store, view, seeds)
+        if linked:
+            payload['linked_artifacts'] = linked
         research = research_context(self.store, view)
         if research:
             payload['research_context'] = research
@@ -221,9 +149,9 @@ class Harness:
         scope = task['scope']
         self.sessions.current(scope['session_id'])
         root = Path(task['repo_path'])
-        current = scope.get('mode') == 'current'
-        checkpoint = scope.get('mode') == 'checkpoint'
-        files = task['current_files'] if current or checkpoint else self.sessions.snapshot(scope['session_id'], scope['repo_after'])['files']
+        if scope.get('mode') != 'checkpoint':
+            raise HarnessError('Evidence requires a checkpoint; create one with beg_review.')
+        files = task['current_files']
         selected_ids = set(scope['event_ids'])
         events = [e for e in self.sessions.events(scope['session_id']) if e['id'] in selected_ids]
         signature = {'graph_version': GRAPH_VERSION, 'history_version': 1,
@@ -232,7 +160,7 @@ class Harness:
         if previous and previous['signature'] == signature:
             return {'view_id': previous['view_id'], 'files_built': 0, 'reused': True}
         graph, contexts, graph_notes, built = construct_graph(self.store, root, files)
-        changes = {} if current else {
+        changes = {
             path: 'added' if path not in task['baseline'] else 'deleted' if path not in files else 'modified'
             for path in sorted(set(files) | set(task['baseline']))
             if files.get(path) != task['baseline'].get(path)
@@ -240,10 +168,10 @@ class Harness:
             and path not in task.get('baseline_uncollected_files', {})
         }
         turns = {e['turn_id']: e['turn'] for e in events if e['kind'] == 'user'}
-        snapshots = [] if current else [
+        snapshots = [
             {**{key: snap[key] for key in ('snapshot_id', 'turn_id', 'phase', 'files', 'notes')},
              'turn': turns[snap['turn_id']], 'uncollected_files': snap.get('uncollected_files', {})}
-            for snap in (task['history_snapshots'] if checkpoint else self.sessions.snapshots(scope['session_id']))
+            for snap in task['history_snapshots']
             if snap['turn_id'] in turns
         ]
         data = {'signature': signature, 'scope': scope, 'files': files, 'baseline': task['baseline'],
@@ -263,8 +191,7 @@ class Harness:
 
     def _repo_evidence(self, view: dict[str, Any], requirement: dict[str, Any]) -> list[dict[str, Any]]:
         text = "\n".join(ref["content"] for ref in requirement["refs"])
-        if view['scope'].get('mode') == 'checkpoint':
-            text += '\n' + requirement['check']  # Retrieval hint, never a new requirement.
+        text += '\n' + requirement['check']  # Retrieval hint, never a new requirement.
         files = view["files"]
         paths = {path for path in files if literal_match(text, path, path=True)}
         anchors = source_line_paths(requirement, view['sources'], list(files))
@@ -450,8 +377,6 @@ class Harness:
                 raise HarnessError(f"File not collected in {view_id}: {identifier}")
             content = self.store.file(file_id)["content"] if file_id else ""
             if kind == "diff":
-                if view['scope'].get('mode') == 'current':
-                    raise HarnessError('Current-code inspection has no historical baseline or diff.')
                 before = self.store.file(old_id)["content"] if old_id else ""
                 diff = difflib.unified_diff(before.splitlines(keepends=True), content.splitlines(keepends=True),
                                             fromfile=f"{view['scope']['repo_before']}/{identifier}",

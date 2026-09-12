@@ -31,7 +31,7 @@ class VerificationChecksTests(unittest.TestCase):
             self.assertEqual(response, {})
             handle_hook(harness, {**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'Tests failed.'})
             check = harness.checks.all()[-1]
-            self.assertEqual(check['trigger'], 'result')
+            self.assertEqual(check['trigger'], 'adjustment')
             self.assertIn('1:failed', [e.get('call_id') for e in check['events']])
             self.assertIsNone(check['assessment'])
             self.assertNotIn('decision', response)
@@ -39,7 +39,8 @@ class VerificationChecksTests(unittest.TestCase):
             self.assertIn('Numerical tolerance exceeded.', str(current['trace']))
             stale = yaml.safe_load(harness.checks.review(check_id=old['id']))
             self.assertFalse(stale['execution_scope']['covers_latest_verification'])
-            self.assertEqual(stale['execution_scope']['latest_check_id'], check['id'])
+            # Failure alone creates adjustment, not a replacement result assessment.
+            self.assertIsNone(stale['execution_scope']['latest_check_id'])
             count = len(harness.checks.all())
             self.assertEqual(handle_hook(harness, failed), {})
             self.assertEqual(len(harness.checks.all()), count)

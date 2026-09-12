@@ -41,6 +41,20 @@ class CheckTests(unittest.TestCase):
         self.harness.checks.evidence(args['check_id'], 'What budget does train.py use?')
         return yaml.safe_load(self.harness.checks.record(**args))
 
+    def test_legacy_tasks_cannot_enter_checkpoint_evidence(self):
+        review = self.review(trigger='result', focus='Check training budget')
+        self.evidence(check_id=review['check_id'], question='What budget does train.py use?')
+        task_id = 'check_' + review['check_id']
+        for scope in ({'mode': 'current'}, {'start_prompt': 'P1', 'end_prompt': 'P1'}):
+            with self.subTest(scope=scope):
+                task = self.harness.store.task(task_id)
+                task['scope'] = {'session_id': 's', **scope}
+                self.harness.store.put_task(task)
+                with self.assertRaisesRegex(HarnessError, 'requires a checkpoint'):
+                    self.harness.build_evidence_groups(task_id)
+                with self.assertRaisesRegex(HarnessError, 'requires a checkpoint'):
+                    self.harness.refresh_task(task_id)
+
     def test_inflight_freezes_code_plans_and_trace_and_survives_restart(self):
         self.code.write_text('def train():\n    return 300\n', encoding='utf-8')
         self.hook('PostToolUse', tool_name='Bash', tool_use_id='run',
@@ -226,8 +240,8 @@ class CheckTests(unittest.TestCase):
     def test_adoption_assessment_can_cover_identical_final_report(self):
         ctx = self.review(trigger='result', focus='The measured result is ready.')
         self.record(check_id=ctx['check_id'], conclusion='clear', summary='The result matches the recorded conditions.')
-        self.assertEqual(self.hook('Stop', last_assistant_message='The measured result is ready.')['decision'], 'block')
-        self.assertEqual(len(self.harness.checks.all()), 2)
+        self.assertEqual(self.hook('Stop', last_assistant_message='The measured result is ready.'), {})
+        self.assertEqual(len(self.harness.checks.all()), 1)
         self.assertEqual(self.harness.checks.get(ctx['check_id'])['assessment']['conclusion'], 'clear')
 
     def test_unread_material_and_old_evidence_pages_remain_frozen(self):

@@ -70,9 +70,9 @@ class SessionReviewTests(unittest.TestCase):
             self.assertEqual(len(state['calls']), 1)
         stop = self.hook('Stop', last_assistant_message='Failed')
         self.assertEqual(stop['decision'], 'block')
-        self.assertEqual([c['trigger'] for c in self.h.checks.all()], ['adjustment', 'result'])
+        self.assertEqual([c['trigger'] for c in self.h.checks.all()], ['adjustment'])
         self.assertEqual(self.hook('Stop', last_assistant_message='Failed'), stop)
-        self.assertEqual(len(self.h.checks.all()), 2)
+        self.assertEqual(len(self.h.checks.all()), 1)
 
     def test_count_accumulates_across_prompts_and_restart(self):
         self.hook('UserPromptSubmit', prompt='Read train.py.')
@@ -148,7 +148,7 @@ class SessionReviewTests(unittest.TestCase):
         handle_hook(self.h, dict(base, hook_event_name='UserPromptSubmit', prompt=stop['reason']))
         (self.repo / 'train.py').write_text('def train():\n    return 40\n', encoding='utf-8')
         handle_hook(self.h, dict(base, hook_event_name='Stop', last_assistant_message='Changed'))
-        self.assertEqual(len(self.h.checks.all()), 4)
+        self.assertEqual(len(self.h.checks.all()), 2)
         self.assertIsNone(self.h.checks.all()[-1]['assessment'])
 
     def test_elapsed_excludes_time_between_turns(self):
@@ -171,7 +171,7 @@ class SessionReviewTests(unittest.TestCase):
         base = dict(session_id='s', turn_id='resume', cwd=str(self.repo))
         handle_hook(self.h, dict(base, hook_event_name='UserPromptSubmit', prompt=stop['reason']))
         self.assertEqual(handle_hook(self.h, dict(base, hook_event_name='Stop', last_assistant_message='Limited.')), {})
-        self.assertEqual(len(self.h.checks.all()), 2)
+        self.assertEqual(len(self.h.checks.all()), 1)
 
     def test_completed_batch_reused_for_same_turn_stop_continuation(self):
         self.hook('UserPromptSubmit', prompt='Run train.py.')
@@ -181,7 +181,7 @@ class SessionReviewTests(unittest.TestCase):
             self.assess(check['id'], conclusion='issue')
         self.assertEqual(self.hook('Stop', stop_hook_active=True,
                                    last_assistant_message='Failed; here is the verified limitation.'), {})
-        self.assertEqual(len(self.h.checks.all()), 2)
+        self.assertEqual(len(self.h.checks.all()), 1)
 
     def test_blocked_stop_keeps_turn_open_for_followup_tools(self):
         self.hook('UserPromptSubmit', prompt='Run train.py.')
@@ -190,3 +190,52 @@ class SessionReviewTests(unittest.TestCase):
         self.call('verification', 0)
         self.assertTrue(any(e.get('original_call_id') == 'verification'
                             for e in self.h.sessions.events('s')))
+
+    def test_independent_stop_triggers(self):
+        scenarios = [
+            ('plan', ['result']), ('count', ['result']), ('time', ['result']),
+            ('limitation', ['result']), ('adjustment', ['adjustment']),
+            ('ambiguity', ['adjustment']), ('failure', ['adjustment']),
+            ('both', ['adjustment', 'result']),
+        ]
+        for scenario, expected in scenarios:
+            with self.subTest(scenario=scenario):
+                self.h = Harness(self.root / ('state_' + scenario), review_call_threshold=2)
+                self.hook('UserPromptSubmit', prompt='Execute PLAN.md' if scenario == 'plan' else 'Inspect code.')
+                if scenario in {'limitation', 'adjustment', 'ambiguity'}:
+                    self.h.checks.record(note_kind=scenario, summary='Material research concern.', decision_status='executed')
+                elif scenario in {'count', 'both'}:
+                    self.call('a', 1 if scenario == 'both' else 0)
+                    self.call('b')
+                elif scenario == 'failure':
+                    self.call('a', 1)
+                elif scenario == 'time':
+                    with runtime(self.h.store, 's') as state:
+                        state['elapsed'] = 301
+                self.assertEqual(self.hook('Stop', last_assistant_message='Done')['decision'], 'block')
+                self.assertEqual([c['trigger'] for c in self.h.checks.all()], expected)
+
+    def test_clear_ambiguity_only_triggers_result(self):
+        self.hook('UserPromptSubmit', prompt='Execute the plan below: inspect train.py.')
+        check = self.h.checks.all()[0]
+        self.assess(check['id'])
+        self.hook('Stop', last_assistant_message='Done')
+        self.assertEqual([c['trigger'] for c in self.h.checks.all()], ['ambiguity', 'result'])
+
+    def test_identified_ambiguity_triggers_adjustment_and_plan_result(self):
+        self.hook('UserPromptSubmit', prompt='Execute the plan below: inspect train.py.')
+        self.assess(self.h.checks.all()[0]['id'], conclusion='issue', summary='Conflicting experimental constraints.')
+        self.hook('Stop', last_assistant_message='Limited')
+        self.assertEqual([c['trigger'] for c in self.h.checks.all()], ['ambiguity', 'adjustment', 'result'])
+
+    def test_new_adjustment_adds_stage_to_result_batch(self):
+        self.hook('UserPromptSubmit', prompt='Execute PLAN.md')
+        self.hook('Stop', last_assistant_message='Done')
+        self.assess(self.h.checks.all()[0]['id'])
+        self.h.checks.record(note_kind='adjustment', summary='Changed evaluation backend.',
+                             decision_status='executed')
+        self.hook('Stop', last_assistant_message='Done')
+        with runtime(self.h.store, 's') as state:
+            batch = state['batch']
+        self.assertEqual([self.h.checks.get(identifier)['trigger'] for identifier in batch['checks']],
+                         ['adjustment', 'result'])

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from .repository import capture
 from .storage import HarnessError, Store, dumps
@@ -15,29 +14,6 @@ class SessionLog:
     def __init__(self, store: Store, max_file_bytes: int) -> None:
         self.store = store
         self.max_file_bytes = max_file_bytes
-
-    def inspection_context(self, repo_path: str | None, session_id: str | None = None) -> str:
-        """Bind current-code inspection to a repo without inventing Prompt or Trace history."""
-        root = Path(repo_path).resolve() if repo_path is not None else None
-        if root is not None and not root.is_dir():
-            raise HarnessError(f"Repository directory is unavailable: {root}")
-        with self.store.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT id FROM active_session WHERE singleton=1').fetchone()
-            active = row[0] if row else None
-            if session_id is not None and session_id != active:
-                raise HarnessError('Only the current session is available.')
-            known = db.execute('SELECT repo_path FROM recordings WHERE session_id=?', (active,)).fetchone()
-            if known:
-                if root is not None and root != Path(known[0]):
-                    raise HarnessError('Repository differs from the current session.')
-                return active
-            if root is None:
-                raise HarnessError('No recorded repository; supply repo_path to inspect a Plan against current code.')
-            active = active or f'inspection_{uuid4().hex[:12]}'
-            db.execute('INSERT OR IGNORE INTO active_session VALUES (1, ?)', (active,))
-            db.execute('INSERT INTO recordings VALUES (?, ?)', (active, str(root)))
-            return active
 
     def current(self, session_id: str | None = None) -> str:
         active = self.store.current_session()
@@ -55,27 +31,6 @@ class SessionLog:
         after_turns = {s['turn_id'] for s in self.snapshots(session_id) if s['phase'] == 'after'}
         return [{'id': f"P{e['turn']}", 'content': e['content'], 'complete': e['turn_id'] in after_turns}
                 for e in self.events(session_id) if e['kind'] == 'user' and not e.get('internal')]
-
-    def plans(self, session_id: str, *, cutoff: int | None = None,
-              last_turn: int | None = None) -> list[dict[str, Any]]:
-        """List captured Markdown versions; the model decides which are Plans."""
-        turns = {e['turn_id']: e['turn'] for e in self.events(session_id) if e['kind'] == 'user'}
-        versions = {}
-        for snap in self.snapshots(session_id):
-            if cutoff is not None and snap['event_cutoff'] > cutoff:
-                continue
-            if last_turn is not None and turns[snap['turn_id']] > last_turn:
-                continue
-            for path, file_id in snap['files'].items():
-                if Path(path).suffix.lower() not in {'.md', '.markdown'}:
-                    continue
-                if file_id not in versions:
-                    versions[file_id] = {'id': f'L{file_id}', 'path': path,
-                                         'first_prompt': f"P{turns[snap['turn_id']]}",
-                                         'file_id': file_id}
-                versions[file_id]['last_prompt'] = f"P{turns[snap['turn_id']]}"
-                versions[file_id]['snapshot_id'] = snap['snapshot_id']
-        return list(versions.values())
 
     def root(self, session_id: str) -> Path:
         with self.store.connect() as db:

@@ -115,7 +115,7 @@ def render_raw_trace_payload(payload: dict[str, Any]) -> TraceView:
 
 
 def render_trace_view(graph: dict[str, Any]) -> TraceView:
-    """Render the complete backend graph as a lossless Task Scope view."""
+    """Render Behavior content with compact task references; omit time edges."""
 
     if graph.get("benchmark") != "feedbacktrace":
         raise AgentLoopError("trace view requires a FeedbackTrace graph")
@@ -385,7 +385,7 @@ def _validate_trace_edges(
                 "edge_id", "source_task_id", "type", "target_task_id",
                 "evidence_ids",
             }
-            or edge.get("type") not in {"informs", "supersedes"}
+            or edge.get("type") not in {"references", "precedes", "informs", "supersedes"}
             or not isinstance(edge.get("evidence_ids"), list)
             or any(item not in evidence_by_id for item in edge["evidence_ids"])
         ):
@@ -454,7 +454,10 @@ def _task_scope(
             max(int(item["end_turn"]) for item in behaviors),
         ],
         "behaviors": [_scope_behavior(item, evidence_by_id) for item in behaviors],
-        "relations": [_scope_edge(item, evidence_by_id) for item in edges],
+        "relations": [
+            {"type": "references", "target_task_id": item["target_task_id"]}
+            for item in edges if item["type"] == "references"
+        ],
     }
 
 

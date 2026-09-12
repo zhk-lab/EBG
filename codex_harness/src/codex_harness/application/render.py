@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-from importlib.resources import files
 from typing import Any
 
 import tiktoken
 import yaml
-
-
-PROMPT = files("codex_harness").joinpath("prompts", "disclose.md").read_text(encoding="utf-8").rstrip("\r\n")
 
 
 class EvidenceDumper(yaml.SafeDumper):

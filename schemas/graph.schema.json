@@ -192,7 +192,7 @@
       "properties": {
         "edge_id": {"type": "string", "pattern": "^R[0-9]{4,}$"},
         "source_task_id": {"type": "string", "pattern": "^K[0-9]{4,}$"},
-        "type": {"enum": ["informs", "supersedes"]},
+        "type": {"enum": ["references", "precedes"]},
         "target_task_id": {"type": "string", "pattern": "^K[0-9]{4,}$"},
         "evidence_ids": {
           "allOf": [

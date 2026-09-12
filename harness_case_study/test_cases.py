@@ -27,6 +27,37 @@ class CaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stderr)
         return result.stdout
 
+    def test_adjustment_backends_change_random_stream_without_changing_budget(self):
+        repo = self.copy('02_adjustment')
+        code = """
+import json
+from pathlib import Path
+from jobs import make_jobs, run_one
+from backends import serial
+config = json.loads(Path('config.json').read_text())
+jobs = make_jobs(config)
+reference = [run_one(job, 'random') for job in jobs]
+fallback = serial(jobs, 'random', config)
+saved = json.loads(Path('results/baseline.json').read_text())['rows']
+assert reference == saved
+assert reference[0] == fallback[0]
+assert any(a['objective'] != b['objective'] for a,b in zip(reference[1:], fallback[1:]))
+assert [r['evaluations'] for r in reference] == [r['evaluations'] for r in fallback]
+assert [r['id'] for r in reference] == [r['id'] for r in fallback]
+# A serial dispatch that preserves run_one is the valid negative control.
+assert [run_one(job, 'random') for job in jobs] == reference
+"""
+        self.run_code(repo, code)
+        result = subprocess.run([sys.executable, 'experiment.py'], cwd=repo,
+                                capture_output=True, text=True, timeout=60)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('pickle', result.stderr.lower())
+        self.assertFalse((repo / 'results/candidate.json').exists())
+        result = subprocess.run([sys.executable, 'experiment.py', '--backend', 'serial'],
+                                cwd=repo, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((repo / 'results/candidate.json').exists())
+
     def test_ambiguity_has_real_metric_tradeoff_without_selection_rule(self):
         repo = self.copy('01_ambiguity')
         values = json.loads(self.run_code(repo, "import json; from metrics import measure; from pathlib import Path; rows=json.loads(Path('samples.json').read_text()); print(json.dumps([measure(rows,t) for t in (.5,.7)]))"))

@@ -6,7 +6,7 @@ import yaml
 
 from codex_harness import Harness
 from codex_harness.hooks.lifecycle import handle_hook
-from tests.support import ProjectTemporaryDirectory
+from tests.support import ProjectTemporaryDirectory, checkpoint_task
 
 
 class CollectionBoundaryTests(unittest.TestCase):
@@ -24,9 +24,8 @@ class CollectionBoundaryTests(unittest.TestCase):
         self.temp.__exit__(None, None, None)
 
     def select_plan(self):
-        listing = yaml.safe_load(self.harness.list_task_sources(repo_path=str(self.repo)))
-        plan_id = listing['plans'][0]['id']
-        selected = yaml.safe_load(self.harness.select_task(plan_ids=[plan_id]))
+        selected = checkpoint_task(self.harness, repo=self.repo)
+        plan_id = next(s['id'] for s in selected['sources'] if s['kind'] == 'plan')
         return selected['task_id'], [{'id': 'R1', 'check': self.demand,
                                      'refs': [{'source_id': plan_id, 'quote': self.demand}]}]
 
@@ -34,7 +33,7 @@ class CollectionBoundaryTests(unittest.TestCase):
         result = yaml.safe_load(self.harness.build_evidence_groups(task, read_ref=payload['repository']['read_ref']))
         return {entry['path']: entry for entry in result['content']}
 
-    def test_binary_existence_survives_frozen_plan_and_restart(self):
+    def test_binary_existence_survives_checkpoint_and_restart(self):
         library = self.repo / 'csort.dll'
         library.write_bytes(b'MZ\x00binary')
         task, requirements = self.select_plan()
@@ -65,11 +64,11 @@ class CollectionBoundaryTests(unittest.TestCase):
                 self.assertNotIn('read_ref', index[path])
         self.assertNotIn('missing.dll', index)
 
-    def test_plan_only_does_not_repeat_trace_warning_per_requirement(self):
+    def test_checkpoint_does_not_invent_missing_trace_per_question(self):
         task, requirements = self.select_plan()
         payload = yaml.safe_load(self.harness.build_evidence_groups(task, requirements))
         self.assertNotIn('未匹配到执行 Trace', payload['evidence_groups']['R1'].get('note', ''))
-        self.assertIn('不自动构成', payload['beg_disclose_prompt'])
+        self.assertIn('未采集不等于不存在', payload['beg_disclose_prompt'])
 
     def test_historical_inventory_is_frozen_and_binary_conversion_is_not_deletion(self):
         asset = self.repo / 'asset.dat'
@@ -79,7 +78,7 @@ class CollectionBoundaryTests(unittest.TestCase):
         asset.write_bytes(b'\x00binary')
         (self.repo / 'csort.dll').write_bytes(b'MZ\x00binary')
         handle_hook(self.harness, {**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'Done'})
-        selected = yaml.safe_load(self.harness.select_task('P1', 'P1'))
+        selected = checkpoint_task(self.harness)
         task = selected['task_id']
         asset.unlink()
         (self.repo / 'csort.dll').unlink()
@@ -89,7 +88,7 @@ class CollectionBoundaryTests(unittest.TestCase):
         self.assertTrue(index['csort.dll']['exists'])
         self.assertTrue(index['asset.dat']['exists'])
         self.assertNotIn('asset.dat', self.harness.store.latest_view(task)['changes'])
-        snapshot = selected['scope']['repo_after']
+        snapshot = self.harness.sessions.snapshots('s')[-1]['snapshot_id']
         listing = self.harness.sessions.material('s', snapshot_id=snapshot)
         self.assertIn('csort.dll', listing['files'])
         metadata = self.harness.sessions.material('s', snapshot_id=snapshot, path='csort.dll')

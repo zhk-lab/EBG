@@ -6,7 +6,7 @@ import yaml
 
 from codex_harness import Harness
 from codex_harness.application.storage import HarnessError
-from tests.support import ProjectTemporaryDirectory
+from tests.support import ProjectTemporaryDirectory, checkpoint_task
 
 
 SCORER = '''LIMIT = 3
@@ -54,9 +54,9 @@ class EvidenceSelectionTests(unittest.TestCase):
 
     def build(self, quotes):
         (self.repo / 'PLAN.md').write_text('\n'.join(quotes), encoding='utf-8', newline='')
-        listing = yaml.safe_load(self.harness.list_task_sources(repo_path=str(self.repo)))
-        plan = next(item['id'] for item in listing['plans'] if item['path'] == 'PLAN.md')
-        task = yaml.safe_load(self.harness.select_task(plan_ids=[plan]))['task_id']
+        selected = checkpoint_task(self.harness, repo=self.repo)
+        plan = next(s['id'] for s in selected['sources'] if s['kind'] == 'plan')
+        task = selected['task_id']
         requirements = [{'id': f'R{i}', 'check': quote, 'refs': [{'source_id': plan, 'quote': quote}]}
                         for i, quote in enumerate(quotes, 1)]
         return task, yaml.safe_load(self.harness.build_evidence_groups(task, requirements))
@@ -99,7 +99,7 @@ class EvidenceSelectionTests(unittest.TestCase):
 
     def test_bad_quote_identifies_requirement_and_reference_without_accepting_it(self):
         task, _ = self.build(['Keep `quality_loss` unchanged.'])
-        source = self.harness.store.task(task)['sources'][0]['id']
+        source = next(s['id'] for s in self.harness.store.task(task)['sources'] if s['kind'] == 'plan')
         with self.assertRaisesRegex(HarnessError, r'R2.*refs\[0\].*not verbatim'):
             self.harness.build_evidence_groups(task, [
                 {'id': 'R2', 'check': 'A summary', 'refs': [{'source_id': source, 'quote': 'Keep ... unchanged.'}]}])
@@ -107,7 +107,7 @@ class EvidenceSelectionTests(unittest.TestCase):
     def test_short_quote_keeps_explicit_file_on_the_same_source_line(self):
         task, _ = self.build(['`runner.py` is the only editable implementation.',
                               'Other material: `scoring.py`.'])
-        source = self.harness.store.task(task)['sources'][0]['id']
+        source = next(s['id'] for s in self.harness.store.task(task)['sources'] if s['kind'] == 'plan')
         result = yaml.safe_load(self.harness.build_evidence_groups(task, [
             {'id': 'R1', 'check': 'Edit only the permitted implementation.',
              'refs': [{'source_id': source, 'quote': 'the only editable implementation'}]}]))
@@ -119,11 +119,11 @@ class EvidenceSelectionTests(unittest.TestCase):
 
     def test_lf_quote_of_crlf_plan_preserves_original_bytes(self):
         task, _ = self.build(['First line.\r\nSecond line.'])
-        source = self.harness.store.task(task)['sources'][0]['id']
+        source = next(s['id'] for s in self.harness.store.task(task)['sources'] if s['kind'] == 'plan')
         result = yaml.safe_load(self.harness.build_evidence_groups(task, [
             {'id': 'R1', 'check': 'Two lines',
              'refs': [{'source_id': source, 'quote': 'First line.\nSecond line.'}]}]))
-        self.assertEqual(result['evidence_groups']['R1']['requirement']['plan'][0]['content'],
+        self.assertEqual(result['evidence_groups']['R1']['cited_sources']['plan'][0]['content'],
                          'First line.\r\nSecond line.')
 
     def test_value_anchors_do_not_resolve_ambiguous_definitions(self):

@@ -4,7 +4,7 @@ import yaml
 
 from codex_harness import Harness
 from codex_harness.application.storage import HarnessError
-from tests.support import ProjectTemporaryDirectory
+from tests.support import ProjectTemporaryDirectory, checkpoint_task
 
 
 class HistoryMaterialTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class HistoryMaterialTests(unittest.TestCase):
             self.harness.sessions.start('session', turn, str(self.repo), 'Keep train.py results comparable.')
             self.code.write_text(f'version = {number}\n', encoding='utf-8', newline='')
             self.harness.sessions.stop('session', turn, f'Finished {number}.')
-        selected = yaml.safe_load(self.harness.select_task('P2', 'P3'))
+        selected = checkpoint_task(self.harness)
         self.task = selected['task_id']
         self.requirements = [{'id': 'R1', 'check': 'Keep results comparable.',
                               'refs': [{'source_id': 'P2', 'quote': 'Keep train.py results comparable.'}]}]
@@ -33,14 +33,14 @@ class HistoryMaterialTests(unittest.TestCase):
 
     def test_intermediate_version_read_is_frozen_and_scoped(self):
         index = self.harness.material(self.view, 'history:index')
-        self.assertEqual([row['prompt'] for row in index], ['P2', 'P3'])
-        self.assertEqual(index[0]['after']['snapshot'], 'S4')
+        self.assertEqual([row['prompt'] for row in index], ['P1', 'P2', 'P3'])
+        self.assertEqual(index[1]['after']['snapshot'], 'S4')
         self.code.write_text('version = 99\n', encoding='utf-8')
         answer = yaml.safe_load(self.harness.build_evidence_groups(
             self.task, read_ref=f'{self.view}:snapshot_file:S4:train.py'))
         self.assertEqual(answer['content'], 'version = 2\n')
         with self.assertRaisesRegex(HarnessError, 'outside this frozen task'):
-            self.harness.material(self.view, 'snapshot_file:S2:train.py')
+            self.harness.material(self.view, 'snapshot_file:S999:train.py')
 
     def test_history_navigation_survives_paging(self):
         self.harness.token_budget = 900

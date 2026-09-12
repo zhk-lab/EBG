@@ -209,7 +209,7 @@ class Checks:
                note_kind: str | None = None, decision_status: str = 'proposed') -> str:
         """Save the agent's judgment without rereading sources or building evidence."""
         if note_kind is not None:
-            if (note_kind not in {'adjustment', 'limitation'} or not summary.strip()
+            if (note_kind not in {'adjustment', 'ambiguity', 'limitation'} or not summary.strip()
                     or decision_status not in {'proposed', 'executed'}
                     or check_id is not None or conclusion is not None or waiting_for_user or resolution is not None):
                 raise HarnessError('A process note needs note_kind, summary and proposed/executed status; no assessment fields.')

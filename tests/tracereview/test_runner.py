@@ -229,7 +229,7 @@ class TraceViewTests(unittest.TestCase):
             "T0001",
         )
 
-    def test_informs_is_nested_in_its_source_task_scope(self) -> None:
+    def test_time_edges_are_internal_only(self) -> None:
         events = [
             {"event_type": "user_prompt", "turn_number": 1, "content": "Choose the API."},
             {
@@ -265,13 +265,10 @@ class TraceViewTests(unittest.TestCase):
             [scope["task_id"] for scope in payload["task_scopes"]],
             ["K0001", "K0002"],
         )
-        informs = payload["task_scopes"][0]["relations"]
-        self.assertEqual(len(informs), 1)
-        self.assertEqual(informs[0]["target_task_id"], "K0002")
-        self.assertEqual(informs[0]["support"][0]["evidence_id"], "e_choice")
-        self.assertEqual(payload["task_scopes"][1]["relations"], [])
+        self.assertTrue(edges)
+        self.assertTrue(all(scope["relations"] == [] for scope in payload["task_scopes"]))
 
-    def test_supersedes_is_nested_in_the_replacing_task_scope(self) -> None:
+    def test_reference_edges_are_compact_and_time_edges_are_hidden(self) -> None:
         events = [
             {"event_type": "user_prompt", "turn_number": 1, "content": "Run it."},
             {
@@ -301,10 +298,11 @@ class TraceViewTests(unittest.TestCase):
                 render_trace_view(build_graph(bundle, evidence, behaviors, edges)).text
             )
 
-        relation = payload["task_scopes"][1]["relations"][0]
-        self.assertEqual(relation["type"], "supersedes")
-        self.assertEqual(relation["target_task_id"], "K0001")
+        self.assertEqual({edge["type"] for edge in edges}, {"precedes", "references"})
         self.assertEqual(payload["task_scopes"][0]["relations"], [])
+        self.assertEqual(payload["task_scopes"][1]["relations"], [
+            {"type": "references", "target_task_id": "K0001"}
+        ])
 
     def test_selectable_evidence_cannot_be_omitted_with_user_only_event(self) -> None:
         graph = copy.deepcopy(trace_graph())

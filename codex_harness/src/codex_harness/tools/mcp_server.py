@@ -23,7 +23,9 @@ def create_server(harness: Harness) -> FastMCP:
     server = FastMCP(
         'beg-disclose', log_level='WARNING',
         instructions='Use beg-review for autoresearch. Review ambiguity before executing a Plan; '
-        'at the Stop checkpoint review adjustment then result. Read a hook check_id or create with trigger/focus. '
+        'At Stop, result is triggered by Plan execution, call/time thresholds or recorded result limitations; '
+        'adjustment by tool failures, material ambiguities or adjustments. Review only triggered stages, '
+        'adjustment before result when both apply. Read a hook check_id or create with trigger/focus. '
         'Review provides requirements, execution records and check criteria, without automatic code retrieval. '
         'Every assessment requires beg_evidence with a concrete question and relevant code/execution evidence. '
         'Use beg_evidence for all active-review read_ref/next expansions, including review pages. '
@@ -47,7 +49,7 @@ def create_server(harness: Harness) -> FastMCP:
     @server.tool(annotations=local, structured_output=False)
     def beg_record(check_id: str | None = None, conclusion: Literal['clear', 'issue', 'uncertain'] | None = None,
                    summary: str = '', waiting_for_user: bool = False, resolution: str | None = None,
-                   note_kind: Literal['adjustment', 'limitation'] | None = None,
+                   note_kind: Literal['adjustment', 'ambiguity', 'limitation'] | None = None,
                    decision_status: Literal['proposed', 'executed'] = 'proposed') -> str:
         """Save the judgment, evidence basis and handling; return a short acknowledgement only.
         Call beg_evidence first for every assessment; unresolved essential premises cannot be clear.
