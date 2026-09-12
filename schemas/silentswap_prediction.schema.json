@@ -9,7 +9,7 @@
     "benchmark": {"const": "silentswap"},
     "swaps": {
       "type": "array",
-      "minItems": 5,
+      "minItems": 0,
       "maxItems": 5,
       "items": {"$ref": "#/$defs/swap"}
     }

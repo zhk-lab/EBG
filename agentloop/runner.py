@@ -48,7 +48,9 @@ def _response_attempts_finish(content: str) -> bool:
     return bool(re.search(r'"action"\s*:\s*"finish"', content))
 
 
-def _finish_format_example(benchmark: str) -> str:
+def _finish_format_example(
+    benchmark: str, prediction_schema: dict[str, Any] | None = None,
+) -> str:
     if benchmark == "silentswap":
         swaps = []
         for slot in range(1, 6):
@@ -73,6 +75,11 @@ def _finish_format_example(benchmark: str) -> str:
                     },
                 }
             )
+        if prediction_schema is not None:
+            properties = prediction_schema.get("$defs", {}).get("swap", {}).get("properties")
+            if properties is not None:
+                swaps = [{key: value for key, value in swap.items() if key in properties}
+                         for swap in swaps]
         prediction: dict[str, Any] = {"swaps": swaps}
     elif benchmark == "specgap":
         prediction = {
@@ -561,7 +568,10 @@ class AgentLoop:
                     "Preserve your original judgment and evidence. Correct only "
                     "the format; do not add or change substantive content.",
                     "Output only the complete JSON object, without explanation.",
-                    _finish_format_example(self.backend.benchmark),
+                    _finish_format_example(
+                        self.backend.benchmark,
+                        self.finish_contract_identity.get("prediction_schema"),
+                    ),
                 )
             )
         else:

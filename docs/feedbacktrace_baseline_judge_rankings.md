@@ -1,69 +1,163 @@
-# FeedbackTrace baseline：两个 judge 的模型排名
+# 三个 Benchmark baseline：Judge 一致性
 
-统计日期：2026-09-09。覆盖 7 个被测模型，每个模型 100 题；两个 judge 均完成全部评分。Qwen 指 `qwen3.7-max-2026-06-08`，GLM 指 `glm-5.2`。
+更新日期：2026-09-12。使用当前选定的 baseline 评分批次，每个模型、每个 benchmark 均为 100 题，比较 Qwen 与 GLM-5.2 对同一组 7 个模型的排名。
 
-分数为各指标的样本均值，按分数降序排名。Spearman ρ 比较两个 judge 对同一组 7 个模型的排名；并列分数使用平均名次。
+分数为各指标的样本均值，按汇总文件中的原始精度降序排名；表中分数显示三位小数。Spearman ρ 为两组名次的 Pearson 相关系数，并列分数使用平均名次。这里衡量的是模型平均分的排名一致性，不是逐题判定一致率；ρ＝1 也不代表两个 judge 给出的分数相同。
 
 ## Spearman 排名相关系数
 
-| 指标 | Qwen 与 GLM-5.2 的 Spearman ρ |
-|---|---:|
-| 验证点对齐 | 0.8929 |
-| 证据定位 | 0.9643 |
-| 证据命中 | 1.0000 |
+| Benchmark | Metric | Qwen vs GLM-5.2 Spearman ρ | 指标来源 |
+|---|---|---:|---|
+| SpecGap | Missing-Constraint Discovery F1 | 1.0000 | LLM judge |
+| SpecGap | Question Quality | 0.9643 | LLM judge |
+| SpecGap | Location F1 | 1.0000 | 规则计算 |
+| SilentSwap | Localization Score | 1.0000 | 规则计算 |
+| SilentSwap | Location Correct | 1.0000 | LLM judge |
+| SilentSwap | Code Correct | 0.9643 | LLM judge |
+| FeedbackTrace | Verification Point Alignment | 0.8929 | LLM judge |
+| FeedbackTrace | Evidence Location Score | 0.9643 | LLM judge |
+| FeedbackTrace | Evidence Hit Rate | 1.0000 | 规则计算 |
 
-## 验证点对齐
+SpecGap 的 Location F1、SilentSwap 的 Localization Score、FeedbackTrace 的 Evidence Hit Rate 均由规则计算，不依赖 judge 的主观判断。因此，这三项的 ρ＝1 不能作为两个 judge 独立判断一致的证据。
 
-| 名次 | Qwen | 分数 | GLM-5.2 | 分数 |
-|---|---|---:|---|---:|
-| 1 | Terra | 0.470 | Terra | 0.555 |
-| 2 | Sol | 0.425 | Sol | 0.535 |
-| 3 | Luna | 0.410 | Luna | 0.510 |
-| 4 | Flash | 0.390 | K3 | 0.475 |
-| 5 | K3 | 0.365 | Sonnet 5 | 0.455 |
-| 6 | Sonnet 5 | 0.300 | Flash | 0.440 |
-| 7 | Pro | 0.200 | Pro | 0.315 |
+Missing-Constraint Discovery F1 指缺失约束发现的语义匹配 F1，与 Location F1 区分。
+
+## SpecGap
+
+### Missing-Constraint Discovery F1
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | K3 | 0.485 | 1 | K3 | 0.502 |
+| 2 | Sol | 0.449 | 2 | Sol | 0.462 |
+| 3 | Sonnet 5 | 0.318 | 3 | Sonnet 5 | 0.338 |
+| 4 | Terra | 0.268 | 4 | Terra | 0.282 |
+| 5 | Luna | 0.234 | 5 | Luna | 0.265 |
+| 6 | Flash | 0.085 | 6 | Flash | 0.097 |
+| 7 | Pro | 0.060 | 7 | Pro | 0.089 |
+
+两个 judge 的模型排名完全一致，但分数不同。
+
+### Question Quality
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | K3 | 0.930 | 1 | K3 | 0.924 |
+| 2 | Sol | 0.924 | 2 | Sol | 0.922 |
+| 3 | Sonnet 5 | 0.771 | 3 | Sonnet 5 | 0.799 |
+| 4 | Terra | 0.677 | 4 | Terra | 0.700 |
+| 5 | Luna | 0.618 | 5 | Luna | 0.636 |
+| 6 | Flash | 0.226 | 6 | Pro | 0.232 |
+| 7 | Pro | 0.186 | 7 | Flash | 0.229 |
+
+Flash 与 Pro 的第六、第七名互换，其余排名一致。
+
+### Location F1
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | Sol | 0.501 | 1 | Sol | 0.501 |
+| 2 | K3 | 0.497 | 2 | K3 | 0.497 |
+| 3 | Sonnet 5 | 0.368 | 3 | Sonnet 5 | 0.368 |
+| 4 | Terra | 0.309 | 4 | Terra | 0.309 |
+| 5 | Luna | 0.305 | 5 | Luna | 0.305 |
+| 6 | Pro | 0.138 | 6 | Pro | 0.138 |
+| 7 | Flash | 0.114 | 7 | Flash | 0.114 |
+
+分数和排名完全一致；该指标由规则计算。
+
+## SilentSwap
+
+### Localization Score
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | K3 | 0.555 | 1 | K3 | 0.555 |
+| 2 | Sol | 0.464 | 2 | Sol | 0.464 |
+| 3 | Terra | 0.417 | 3 | Terra | 0.417 |
+| 4 | Luna | 0.403 | 4 | Luna | 0.403 |
+| 5 | Sonnet 5 | 0.294 | 5 | Sonnet 5 | 0.294 |
+| 6 | Flash | 0.262 | 6 | Flash | 0.262 |
+| 7 | Pro | 0.136 | 7 | Pro | 0.136 |
+
+分数和排名完全一致；该指标由规则计算。
+
+### Location Correct
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | K3 | 0.430 | 1 | K3 | 0.590 |
+| 2 | Sol | 0.320 | 2 | Sol | 0.535 |
+| 3 | Terra | 0.300 | 3 | Terra | 0.525 |
+| 4 | Luna | 0.275 | 4 | Luna | 0.385 |
+| 5 | Sonnet 5 | 0.135 | 5 | Sonnet 5 | 0.240 |
+| 6 | Flash | 0.100 | 6 | Flash | 0.230 |
+| 7 | Pro | 0.025 | 7 | Pro | 0.075 |
+
+两个 judge 的模型排名完全一致，但分数不同。
+
+### Code Correct
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | K3 | 0.675 | 1 | K3 | 0.705 |
+| 2 | Sol | 0.605 | 2 | Terra | 0.595 |
+| 3 | Terra | 0.570 | 3 | Sol | 0.590 |
+| 4 | Luna | 0.290 | 4 | Luna | 0.245 |
+| 5 | Sonnet 5 | 0.210 | 5 | Sonnet 5 | 0.235 |
+| 6 | Flash | 0.120 | 6 | Flash | 0.130 |
+| 7 | Pro | 0.010 | 7 | Pro | 0.025 |
+
+Sol 与 Terra 的第二、第三名互换，其余排名一致。
+
+## FeedbackTrace
+
+### Verification Point Alignment
+
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | Terra | 0.470 | 1 | Terra | 0.555 |
+| 2 | Sol | 0.425 | 2 | Sol | 0.535 |
+| 3 | Luna | 0.410 | 3 | Luna | 0.510 |
+| 4 | Flash | 0.390 | 4 | K3 | 0.475 |
+| 5 | K3 | 0.365 | 5 | Sonnet 5 | 0.455 |
+| 6 | Sonnet 5 | 0.300 | 6 | Flash | 0.440 |
+| 7 | Pro | 0.200 | 7 | Pro | 0.315 |
 
 前三名一致；差异集中在 Flash、K3、Sonnet 5 的相对位置。
 
-## 证据定位
+### Evidence Location Score
 
-| 名次 | Qwen | 分数 | GLM-5.2 | 分数 |
-|---|---|---:|---|---:|
-| 1 | Terra | 0.590 | Terra | 0.585 |
-| 2 | Luna | 0.545 | Luna | 0.545 |
-| 3 | Sol | 0.540 | Sol | 0.525 |
-| 4 | K3 | 0.525 | K3 | 0.510 |
-| 5 | Sonnet 5 | 0.465 | Flash | 0.445 |
-| 6 | Flash | 0.460 | Sonnet 5 | 0.435 |
-| 7 | Pro | 0.345 | Pro | 0.345 |
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1 | Terra | 0.590 | 1 | Terra | 0.585 |
+| 2 | Luna | 0.545 | 2 | Luna | 0.545 |
+| 3 | Sol | 0.540 | 3 | Sol | 0.525 |
+| 4 | K3 | 0.525 | 4 | K3 | 0.510 |
+| 5 | Sonnet 5 | 0.465 | 5 | Flash | 0.445 |
+| 6 | Flash | 0.460 | 6 | Sonnet 5 | 0.435 |
+| 7 | Pro | 0.345 | 7 | Pro | 0.345 |
 
-仅 Flash 与 Sonnet 5 的第五、第六名互换。
+Flash 与 Sonnet 5 的第五、第六名互换，其余排名一致。
 
-## 证据命中
+### Evidence Hit Rate
 
-两个 judge 下的分数和排名完全相同。
+| Qwen Rank | Model | Score | GLM-5.2 Rank | Model | Score |
+|---:|---|---:|---:|---|---:|
+| 1.5 | Sol | 0.550 | 1.5 | Sol | 0.550 |
+| 1.5 | K3 | 0.550 | 1.5 | K3 | 0.550 |
+| 3.5 | Flash | 0.540 | 3.5 | Flash | 0.540 |
+| 3.5 | Terra | 0.540 | 3.5 | Terra | 0.540 |
+| 5 | Luna | 0.530 | 5 | Luna | 0.530 |
+| 6 | Sonnet 5 | 0.480 | 6 | Sonnet 5 | 0.480 |
+| 7 | Pro | 0.340 | 7 | Pro | 0.340 |
 
-| 名次 | 模型 | Qwen | GLM-5.2 |
-|---|---|---:|---:|
-| 并列 1 | Sol、K3 | 0.550 | 0.550 |
-| 并列 3 | Flash、Terra | 0.540 | 0.540 |
-| 5 | Luna | 0.530 | 0.530 |
-| 6 | Sonnet 5 | 0.480 | 0.480 |
-| 7 | Pro | 0.340 | 0.340 |
-
-证据命中由程序根据预测证据 ID 与 gold 证据 ID 是否存在交集计算，不依赖 judge 的主观评分。因此，该指标的 ρ＝1 不能作为两个 judge 独立判断一致的证据。
+分数和排名完全一致；Sol、K3 的平均名次为 1.5，Flash、Terra 为 3.5。该指标由规则计算。
 
 ## 数据来源
 
-读取 `experiments/feedbacktrace/<模型目录>/baseline/summary.json` 中两个 judge 的 `groups.*.score_means`，使用 `scipy.stats.spearmanr` 计算相关系数。
+使用 `experiments/<benchmark>/<model>/baseline/summary.json` 中各 judge 的 `groups["<benchmark>/raw"].score_means`。
 
-| 展示名称 | 模型目录 |
-|---|---|
-| Luna | `luna` |
-| Flash | `deepseek_flash` |
-| Pro | `deepseek_pro` |
-| Terra | `terra` |
-| Sol | `sol` |
-| K3 | `kimi-k3` |
-| Sonnet 5 | `claude` |
+- Qwen：`qwen3.7-max-2026-06-08`。
+- GLM-5.2：SpecGap、SilentSwap 的记录键为 `glm-5-2`，FeedbackTrace 为 `glm-5.2`。
+- Luna 的目录名：SpecGap、SilentSwap 为 `gpt5.6`，FeedbackTrace 为 `luna`。

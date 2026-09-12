@@ -59,7 +59,7 @@ class PredictionTests(unittest.TestCase):
 
         self.assertEqual(len(prediction["findings"]), 2)
 
-    def test_silentswap_formal_schema_accepts_five_grounded_swaps(self) -> None:
+    def test_silentswap_schema_accepts_zero_to_five_grounded_swaps(self) -> None:
         schema = load_prediction_schema(PROJECT_ROOT / "schemas", "silentswap")
         visible = model_prediction_schema(schema)
         self.assertNotIn("input_id", visible["properties"])
@@ -111,6 +111,26 @@ class PredictionTests(unittest.TestCase):
             prediction["swaps"][1]["target"]["symbol"]["qualified_name"],
             [],
         )
+
+        for count in range(5):
+            with self.subTest(count=count):
+                partial = validate_repo_prediction(
+                    {"swaps": swaps[:count]},
+                    input_id="ss_schema",
+                    benchmark="silentswap",
+                    schema=schema,
+                    observed_spans=[EvidenceSpan("pkg/api.py", "public", 1, 5)],
+                )
+                self.assertEqual(len(partial["swaps"]), count)
+
+        with self.assertRaises(PredictionFormatError):
+            validate_repo_prediction(
+                {"swaps": swaps + [swaps[0]]},
+                input_id="ss_schema",
+                benchmark="silentswap",
+                schema=schema,
+                observed_spans=[EvidenceSpan("pkg/api.py", "public", 1, 5)],
+            )
 
         with self.assertRaises(PredictionFormatError):
             validate_repo_prediction(

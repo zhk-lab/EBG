@@ -9,33 +9,25 @@ INPUT AND GRAPH FORMAT
 TASK DOCUMENT defines BEFORE; numbered source returned by read defines AFTER. Find
 five independent, evidence-supported behavioral changes between them.
 
-IMPORTANT: Rules 1-4 are the main priorities for this task.
 
-1. INSPECT THE FIRST 5 DIRECTORY FILES FIRST. Most swaps are concentrated there.
-   One file or function may contain MULTIPLE swaps. Review all relevant document
-   rules and returned code before searching farther.
+1. Use the BEG directory and graph to choose reads relevant to documented behavior.
+   Directory rank is a navigation hint, not proof that a file contains a change.
+   Follow concrete evidence gaps beyond the initial files when necessary. Review
+   all returned source blocks: one file or function can contain several swaps.
+   When the evidence is sufficient, aim to finish in about 2-3 total turns;
+   take additional turns when needed to resolve remaining evidence gaps.
 
-2. FOCUS ON CAREFULLY COMPARING THE FIRST FEW FILES WITH THE DOCUMENT.
-   Broader reading can distract from the actual changes. Read farther only to
-   resolve a specific evidence gap; aim to finish in 2-3 total turns.
-
-3. CITE THE SMALLEST COMPLETE CHANGED OPERATIONS. Most swaps need only 1-2 lines.
+2. CITE THE SMALLEST COMPLETE CHANGED OPERATIONS. Most swaps need only 1-2 lines.
    Include ALL coordinated sites, using separate ranges for non-contiguous lines.
    Read enough context to understand the behavior; cite only responsible code.
 
-4. TO EARN CODE-CORRECT CREDIT, state the COMPLETE BEFORE -> AFTER change.
-   Take BEFORE from the full document clause and AFTER from literal source.
-   Under the SAME distinguishing trigger, state both concrete operations and
-   their returns, exceptions, or state changes. Keep code_change and
-   behavioral_effect consistent. Never reverse direction or invent consequences.
-
-5. CHECK THE CASES THAT EXPOSE THE DIFFERENCE: exact boundaries; missing vs
+3. CHECK THE CASES THAT EXPOSE THE DIFFERENCE: exact boundaries; missing vs
    None/False/0/empty; competing values and multiple matches; repeated calls;
    return types, object identity, order, units, and encoding; exception timing.
    Preserve documented quirks even when they seem unreasonable. Doc: headings
    are navigation hints; verify the actual document clause and implementation.
 
-6. GROUP BY THE DOCUMENTED BEHAVIOR, NOT BY FUNCTION OR LINE.
+4. GROUP BY THE DOCUMENTED BEHAVIOR, NOT BY FUNCTION OR LINE.
    Separate independent changes within one function. Merge coordinated changes
    implementing the same rule across branches, types, or methods, such as
    equality and hashing. Do not duplicate one change or merge unrelated rules.
@@ -111,16 +103,16 @@ Use exactly this object inside the finish action, with exactly five swap objects
         "file": "exact/repository/path.py",
         "symbol": {
           "kind": "function",
-          "qualified_name": ["source_identifier"]
+          "qualified_name": [
+            "source_identifier"
+          ]
         },
-        "line_ranges": [{"start": 10, "end": 10}]
-      },
-      "swap_type": "one allowed taxonomy value",
-      "code_change": "original operation -> current operation",
-      "trigger_condition": "minimal reproducible distinguishing condition",
-      "behavioral_effect": {
-        "before": "complete original documented outcome",
-        "after": "complete current implemented outcome"
+        "line_ranges": [
+          {
+            "start": 10,
+            "end": 10
+          }
+        ]
       }
     }
   ]
@@ -128,7 +120,8 @@ Use exactly this object inside the finish action, with exactly five swap objects
 ```
 
 Repeat the swap object until `swaps` has exactly five distinct entries. Do not add fields
-outside this shape.
+outside this shape. Output only target for each swap; the behavioral comparisons
+above are used to verify and distinguish locations, not as additional output fields.
 
 - `target.file`: the exact path returned by read.
 - `target.symbol.kind`: one of `function`, `method`, `class`, `field`, or `module`. A
@@ -138,17 +131,13 @@ outside this shape.
   `["Catalog", "load"]`; omit modules, parentheses, and parameters.
 - `target.line_ranges`: the smallest displayed inclusive ranges responsible for the
   substitution; use separate entries for non-contiguous lines.
-- `swap_type`: the one taxonomy value that best fits.
-- `code_change`: state both concrete operations in the correct BEFORE -> AFTER direction.
-- `trigger_condition`: the minimal reproducible condition separating the behaviors.
-- `behavioral_effect.before` and `.after`: complete concrete outcomes, not vague impact.
 
 FINAL CHECK
 
 Before finish, confirm that all five swaps are mutually distinct and each pairs a
 concrete BEFORE rule with literal contradictory AFTER source returned by read. Recheck
-the exact current lines: every AFTER clause must paraphrase what the code actually does,
-not a plausible mutation it could have made. Confirm the direction, count, target owner,
+the exact current lines: verify what the code actually does, not a plausible mutation
+it could have made. Confirm the direction, count, target owner,
 and smallest responsible line ranges, and merge repeated locations of one operation.
 Each round must return exactly one action. When you have the answer and the evidence is
 sufficient, return finish. Check the JSON action format carefully.

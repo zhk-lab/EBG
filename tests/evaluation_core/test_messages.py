@@ -54,14 +54,14 @@ class PromptAssetTests(unittest.TestCase):
                     graph_rules.split("- `finding_id`", 1)[1],
                 )
             else:
-                # BEG has more specific citation guidance. Other grouping rules,
-                # taxonomy and the output contract remain shared with baseline.
+                # Localization retains grouping and taxonomy guidance, while
+                # baseline still requires the full behavioral answer.
                 self.assertEqual(
                     re.sub(r"\n- Cite .*?(?=\n- )", "",
-                           raw_rules.split("TARGET AND GROUPING RULES", 1)[1],
+                           raw_rules.split("TARGET AND GROUPING RULES", 1)[1].split("OUTPUT CONTRACT", 1)[0],
                            flags=re.DOTALL),
                     re.sub(r"\n- Cite .*?(?=\n- )", "",
-                           graph_rules.split("TARGET AND GROUPING RULES", 1)[1],
+                           graph_rules.split("TARGET AND GROUPING RULES", 1)[1].split("OUTPUT CONTRACT", 1)[0],
                            flags=re.DOTALL),
                 )
             if benchmark == "silentswap":
@@ -179,7 +179,8 @@ class PromptAssetTests(unittest.TestCase):
             with self.subTest(benchmark=benchmark):
                 prompt = load_task_prompt("BEG", benchmark)
                 schema = model_prediction_schema(
-                    load_prediction_schema(PROJECT_ROOT / "schemas", benchmark)
+                    load_prediction_schema(PROJECT_ROOT / "schemas",
+                        "silentswap_location_prediction.schema.json" if benchmark == "silentswap" else benchmark)
                 )
                 for field in _property_names(schema):
                     self.assertIn(f'"{field}"', prompt)
@@ -247,26 +248,20 @@ class PromptAssetTests(unittest.TestCase):
         self.assertIn("SilentSwap recovery", normalized)
         self.assertIn("original_document", normalized)
         self.assertIn("BEFORE -> AFTER difference", normalized)
-        self.assertIn("An F Read ID returns a compact Local Graph", normalized)
-        self.assertIn("not necessarily the entire file", normalized)
-        self.assertIn("[DIRECT ROOT]", prompt)
-        self.assertIn("[CONTEXT via feeds]", prompt)
         self.assertIn("numbered source returned by read defines AFTER", normalized)
         self.assertNotIn("Local Graph JSON", prompt)
         self.assertNotIn("Compression preserves", prompt)
         self.assertIn("TASK DOCUMENT defines BEFORE", normalized)
-        self.assertIn("Revisit every root and context block for omissions", normalized)
-        self.assertIn("other changes in the same function", normalized)
         self.assertIn("For each candidate, establish all four facts", normalized)
         self.assertIn("Distinguishing trigger", normalized)
         self.assertIn("Review every returned source block before finish", normalized)
         self.assertIn("Report five distinct swaps", normalized)
         self.assertIn("AFTER source actually read", normalized)
-        self.assertIn("Keep cited ranges precise and small", normalized)
-        self.assertIn("One or two lines is a typical size, not a hard limit", normalized)
+        self.assertIn("Most swaps need only 1-2 lines", normalized)
+        self.assertIn("Include ALL coordinated sites", normalized)
         self.assertIn("Report independent changes separately", normalized)
-        self.assertIn("list non-contiguous ranges separately", normalized)
-        self.assertIn("correct BEFORE -> AFTER direction", normalized)
+        self.assertIn("use separate entries for non-contiguous lines", normalized)
+        self.assertIn("Output only target for each swap", normalized)
         self.assertIn("a top-level assignment is a `field`", normalized)
         for heading in (
             "INPUT AND GRAPH FORMAT",
@@ -434,11 +429,11 @@ class PromptAssetTests(unittest.TestCase):
                 self.assertIn("Each R Read ID", raw.initial_user_prompt)
                 self.assertNotIn("Local Graph JSON", raw.initial_user_prompt)
                 self.assertIn("INPUT AND GRAPH FORMAT", graph.initial_user_prompt)
-                self.assertRegex(
-                    graph.initial_user_prompt,
-                    r"compact (?:linear )?Local Graph",
-                )
-                self.assertIn("[DIRECT ROOT]", graph.initial_user_prompt)
+                if benchmark == "specgap":
+                    self.assertRegex(graph.initial_user_prompt, r"compact (?:linear )?Local Graph")
+                    self.assertIn("[DIRECT ROOT]", graph.initial_user_prompt)
+                else:
+                    self.assertIn("Output only target for each swap", graph.initial_user_prompt)
                 self.assertNotIn("Local Graph JSON", graph.initial_user_prompt)
 
     def test_beg_repo_request_explains_all_runtime_blocks(self) -> None:

@@ -231,7 +231,9 @@ def run_batch_judges(
 def _needs_deferred_retry(config: JudgeBatchConfig, result: dict[str, Any]) -> bool:
     root = sample_directory(config.output_root, f"judges/{config.judge_model}", result["arm"], result["input_id"])
     if result["status"] == "complete":
-        return (root / "retry_1/status.json").is_file()
+        retry_status = root / "retry_1/status.json"
+        # A later validated correction must not be replaced by an older failed retry.
+        return retry_status.is_file() and _read_json(retry_status).get("status") == "complete"
     # Missing predictions and invalid local inputs require a fix, not a model rerun.
     return str(result.get("failure", "")).startswith((
         "JudgeNetworkRetriesExhausted:", "JudgeResponseFormatError:",
@@ -683,7 +685,9 @@ def _validate_saved_result(
             "input_id": prediction["input_id"],
             "benchmark": benchmark,
             "rule_based": judge.rule_based_score(gold, prediction),
-            "llm_judge": judge.validate_llm_response(result["llm_judge"]),
+            "llm_judge": judge.validate_llm_response(
+                result["llm_judge"], candidate_count=len(prediction["swaps"])
+            ),
         }
     else:
         expected = _validate_feedbacktrace_result(judge, prediction, result)
@@ -848,6 +852,7 @@ def _attempt_usage(sample_root: Path) -> dict[str, int]:
     totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     paths = list((sample_root / "attempts").glob("*.json"))
     paths.extend((sample_root / "retry_1/attempts").glob("*.json"))
+    paths.extend(sample_root.glob("alignment_correction*/attempts/*.json"))
     for path in sorted(paths):
         value = _read_json(path)
         if value.get("provider_called") is not True:

@@ -331,8 +331,8 @@ def rule_based_score(
 ) -> dict[str, Any]:
     references = _gold_localizations(gold)
     predicted_swaps = prediction.get("swaps")
-    if not isinstance(predicted_swaps, list) or len(predicted_swaps) != SWAPS_PER_SAMPLE:
-        raise ValueError("answer must contain exactly five swaps")
+    if not isinstance(predicted_swaps, list) or len(predicted_swaps) > SWAPS_PER_SAMPLE:
+        raise ValueError("answer must contain a list of at most five swaps")
     pair_scores = [
         [
             score_localization_pair(
@@ -344,7 +344,7 @@ def rule_based_score(
         for swap in predicted_swaps
     ]
     assignment = max(
-        itertools.permutations(range(SWAPS_PER_SAMPLE)),
+        itertools.permutations(range(SWAPS_PER_SAMPLE), len(predicted_swaps)),
         key=lambda candidate: (
             sum(
                 pair_scores[index][gold_index]["localization_score"]
@@ -378,18 +378,20 @@ def rule_based_score(
         )
 
     def mean(field: str) -> float:
+        # Unreported gold swaps contribute zero, including an empty answer.
         return sum(float(match[field]) for match in matches) / SWAPS_PER_SAMPLE
 
+    complete = len(matches) == SWAPS_PER_SAMPLE
     return {
         "gold_swaps": SWAPS_PER_SAMPLE,
         "predicted_swaps": len(predicted_swaps),
-        "file_exact": all(match["file_exact"] for match in matches),
-        "symbol_exact": all(match["symbol_exact"] for match in matches),
+        "file_exact": complete and all(match["file_exact"] for match in matches),
+        "symbol_exact": complete and all(match["symbol_exact"] for match in matches),
         "line_precision": mean("line_precision"),
         "line_recall": mean("line_recall"),
         "line_f1": mean("line_f1"),
-        "line_hit_at_0": all(match["line_hit_at_0"] for match in matches),
-        "line_hit_at_3": all(match["line_hit_at_3"] for match in matches),
+        "line_hit_at_0": complete and all(match["line_hit_at_0"] for match in matches),
+        "line_hit_at_3": complete and all(match["line_hit_at_3"] for match in matches),
         "localization_score": mean("localization_score"),
         "matched_swaps": matches,
     }
@@ -469,6 +471,7 @@ def _evaluate_checks(
     components: tuple[str, ...],
     dimension: str,
     partial_minimum: int,
+    candidate_count: int,
 ) -> tuple[list[dict[str, Any]], int | float]:
     if not isinstance(checks, list) or len(checks) != SWAPS_PER_SAMPLE:
         raise ValueError(f"judge must return exactly five {dimension} checks")
@@ -484,7 +487,8 @@ def _evaluate_checks(
     ]
     if any(
         isinstance(number, bool)
-        or number not in range(1, SWAPS_PER_SAMPLE + 1)
+        or not isinstance(number, int)
+        or number not in range(1, candidate_count + 1)
         for number in matched_candidates
     ) or len(matched_candidates) != len(set(matched_candidates)):
         raise ValueError(f"{dimension} checks must use a one-to-one candidate alignment")
@@ -520,12 +524,15 @@ def _evaluate_checks(
     return normalized, score
 
 
-def validate_llm_response(value: Mapping[str, Any]) -> dict[str, Any]:
+def validate_llm_response(
+    value: Mapping[str, Any], *, candidate_count: int = SWAPS_PER_SAMPLE
+) -> dict[str, Any]:
     location_checks, location_score = _evaluate_checks(
-        value["location_checks"], LOCATION_COMPONENTS, "location", 3
+        value["location_checks"], LOCATION_COMPONENTS, "location", 3, candidate_count
     )
     code_checks, code_score = _evaluate_checks(
-        value["code_change_checks"], CODE_CHANGE_COMPONENTS, "code change", 4
+        value["code_change_checks"], CODE_CHANGE_COMPONENTS, "code change", 4,
+        candidate_count,
     )
     location_alignment = {
         check["reference_swap_number"]: check["matched_candidate_swap_number"]
@@ -599,6 +606,7 @@ def judge_prediction(
                 build_llm_messages(
                     gold, prediction, formal_data_root=formal_data_root
                 )
-            )
+            ),
+            candidate_count=len(prediction["swaps"]),
         ),
     }

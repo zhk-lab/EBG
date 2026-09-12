@@ -84,6 +84,45 @@ class ScriptedClient(RoutingClient):
 
 
 class BatchJudgeTests(unittest.TestCase):
+    def test_valid_correction_is_not_replaced_by_failed_retry(self):
+        from scripts.main.judge import _needs_deferred_retry, _attempt_usage
+        with tempfile.TemporaryDirectory() as directory:
+            config = self._fixture(Path(directory), benchmarks=("silentswap",))
+            root = config.output_root / "judges" / config.judge_model / "ss_test"
+            _write(root / "retry_1/status.json", {"status": "failed"})
+            result = {"status": "complete", "arm": "graph", "input_id": "ss_test"}
+            self.assertFalse(_needs_deferred_retry(config, result))
+            _write(root / "alignment_correction/attempts/alignment_1_001.json", {
+                "provider_called": True, "usage": {"input_tokens": 10, "output_tokens": 2}})
+            self.assertEqual(_attempt_usage(root)["input_tokens"], 10)
+
+    def test_partial_silentswap_answers_are_scored_and_resumed(self) -> None:
+        for count in (0, 4):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
+                config = self._fixture(Path(directory), benchmarks=("silentswap",))
+                prediction = _silentswap_prediction()
+                prediction["swaps"] = prediction["swaps"][:count]
+                _write(config.output_root / "runs/ss_test/prediction.json", prediction)
+                response = _perfect_silentswap_response()
+                for dimension in ("location_checks", "code_change_checks"):
+                    for check in response[dimension][count:]:
+                        check["matched_candidate_swap_number"] = None
+                        for key, value in check.items():
+                            if isinstance(value, bool):
+                                check[key] = False
+                calls = []
+                outcomes = [response]
+                for _ in range(2):
+                    result = run_batch_judges(
+                        config,
+                        client_factory=lambda: ScriptedClient(config, calls, outcomes),
+                        report=lambda _: None,
+                    )
+                    self.assertEqual(result["totals"]["completed_samples"], 1)
+                    scores = result["groups"]["silentswap/graph"]["score_means"]
+                    self.assertEqual(scores["code_change_correct"], 0.5 if count == 4 else 0)
+                self.assertEqual(len(calls), 1)
+
     def test_migrated_judge_reuses_results_and_preserves_prediction_summary(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self._fixture(Path(directory), benchmarks=("specgap",))

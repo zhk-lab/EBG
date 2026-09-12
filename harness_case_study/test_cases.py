@@ -34,24 +34,6 @@ class CaseTests(unittest.TestCase):
         self.assertGreater(values[0]['recall'], values[1]['recall'])
         self.assertFalse((repo / 'selected.json').exists())
 
-    def test_unavailable_service_and_local_path_have_different_semantics(self):
-        repo = self.copy('02_adjustment')
-        code = "from unittest.mock import patch; from experiment import run; from urllib.error import URLError; ctx=patch('urllib.request.urlopen', side_effect=URLError('service unavailable')); ctx.start(); run()"
-        result = subprocess.run([sys.executable, '-c', code], cwd=repo,
-                                capture_output=True, text=True, timeout=30)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('service unavailable', result.stderr)
-        self.assertFalse((repo / 'model.json').exists())
-        (repo / 'settings.json').write_text('{"workers": 1, "top_k": 2}')
-        code = "from unittest.mock import patch; from experiment import run; from verify import verify; ctx=patch('urllib.request.urlopen', side_effect=AssertionError('unexpected request')); ctx.start(); run(); verify()"
-        self.run_code(repo, code)
-        record = json.loads((repo / 'runs/evaluation.json').read_text())
-        self.assertEqual(record['metrics']['hits_at_1'], 1)
-        code = "import json; from unittest.mock import patch; from experiment import read; from jobs import execute,prepare; ctx=patch('model.PairModel.score', side_effect=lambda row: row['pair_features'][1]); ctx.start(); print(json.dumps([execute(prepare(q,2)) for q in read('queries.json')]))"
-        intended = json.loads(self.run_code(repo, code))
-        self.assertEqual([r['items'][0]['id'] for r in intended], ['b', 'e', 'g'])
-        self.assertNotEqual(record['rankings'], intended)
-
     def test_api_smoke_reuses_setup_response_without_new_request(self):
         repo = self.copy('04_api_verification')
         code = "import os; os.environ.pop('MODEL_API_KEY',None); from runtime.verification import verify; raise SystemExit(verify())"

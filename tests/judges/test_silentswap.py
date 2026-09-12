@@ -249,6 +249,58 @@ class FormalJudgeAlignmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one-to-one"):
             JUDGE.validate_llm_response(response)
 
+    def test_partial_localization_matches_any_gold_and_keeps_denominator(self) -> None:
+        for count in range(6):
+            with self.subTest(count=count):
+                prediction = _prediction()
+                prediction["swaps"] = list(reversed(prediction["swaps"]))[:count]
+                score = JUDGE.rule_based_score(_gold(), prediction)
+                self.assertEqual(score["predicted_swaps"], count)
+                self.assertEqual(score["gold_swaps"], 5)
+                for metric in ("localization_score", "line_precision", "line_recall", "line_f1"):
+                    self.assertEqual(score[metric], count / 5)
+                for metric in ("file_exact", "symbol_exact", "line_hit_at_0", "line_hit_at_3"):
+                    self.assertEqual(score[metric], count == 5)
+                self.assertEqual(
+                    [item["gold_swap_number"] for item in score["matched_swaps"]],
+                    list(range(5, 5 - count, -1)),
+                )
+
+    def test_localization_rejects_more_than_five_candidates(self) -> None:
+        prediction = _prediction()
+        prediction["swaps"].append(prediction["swaps"][0])
+        with self.assertRaisesRegex(ValueError, "at most five"):
+            JUDGE.rule_based_score(_gold(), prediction)
+
+    def test_partial_answers_keep_five_gold_judge_tiers(self) -> None:
+        for count in range(6):
+            with self.subTest(count=count):
+                prediction = _prediction()
+                prediction["swaps"] = prediction["swaps"][:count]
+                response = _response(location_correct=count, code_correct=count)
+                for dimension in ("location_checks", "code_change_checks"):
+                    for check in response[dimension][count:]:
+                        check["matched_candidate_swap_number"] = None
+                client = SimpleNamespace(complete=lambda messages: response)
+                result = JUDGE.judge_prediction(_gold(), prediction, client)
+                judgment = result["llm_judge"]
+                self.assertEqual(judgment["scores"], {
+                    "location_correct": 1 if count == 5 else 0.5 if count >= 3 else 0,
+                    "code_change_correct": 1 if count == 5 else 0.5 if count == 4 else 0,
+                })
+                self.assertEqual(
+                    JUDGE.validate_llm_response(judgment, candidate_count=count), judgment
+                )
+
+    def test_judge_rejects_alignment_to_an_unreported_candidate(self) -> None:
+        prediction = _prediction()
+        prediction["swaps"] = prediction["swaps"][:4]
+        client = SimpleNamespace(
+            complete=lambda messages: _response(location_correct=5, code_correct=5)
+        )
+        with self.assertRaisesRegex(ValueError, "one-to-one"):
+            JUDGE.judge_prediction(_gold(), prediction, client)
+
 
 if __name__ == "__main__":
     unittest.main()

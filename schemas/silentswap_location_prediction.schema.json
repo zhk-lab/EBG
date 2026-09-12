@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BEG SilentSwap Stage One Locations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_id",
+    "benchmark",
+    "swaps"
+  ],
+  "properties": {
+    "input_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "benchmark": {
+      "const": "silentswap"
+    },
+    "swaps": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/swap"
+      }
+    }
+  },
+  "$defs": {
+    "swap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/target"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "symbol",
+        "line_ranges"
+      ],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbol": {
+          "$ref": "#/$defs/symbol"
+        },
+        "line_ranges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/line_range"
+          }
+        }
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "qualified_name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "function",
+            "method",
+            "class",
+            "field",
+            "module"
+          ]
+        },
+        "qualified_name": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "module"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "qualified_name": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "qualified_name": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "line_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

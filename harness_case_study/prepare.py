@@ -11,7 +11,7 @@ from codex_harness.integration import write_integration
 STUDY = Path(__file__).resolve().parent
 ROOT = next(p for p in STUDY.parents if (p / 'codex_harness/pyproject.toml').is_file())
 DESKTOP = ROOT.parent / 'BEG_autoresearch_cases'
-CASES = ('01_ambiguity', '02_adjustment', '03_data_leakage', '04_api_verification', '05_search_budget')
+CASES = ('01_ambiguity', '03_data_leakage', '04_api_verification', '05_search_budget')
 
 
 def put(root, path, content):

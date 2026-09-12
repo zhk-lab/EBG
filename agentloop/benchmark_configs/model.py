@@ -116,13 +116,17 @@ class RepoBenchmarkConfig:
         initial_index: str,
         prompt_variant: PromptVariant = "BEG",
         source_texts: dict[str, str] | None = None,
+        task_prompt: str | None = None,
+        prediction_schema: dict[str, Any] | None = None,
     ) -> BoundModule7:
         """Bind an overrideable schema and construct one frozen run input."""
 
         self.validate_task_document(task_document_name)
-        schema = load_prediction_schema(
-            schema_root,
-            self.prediction_schema_filename,
+        schema_filename = self.prediction_schema_filename
+        if self.benchmark == "silentswap" and prompt_variant == "BEG":
+            schema_filename = "silentswap_location_prediction.schema.json"
+        schema = prediction_schema if prediction_schema is not None else load_prediction_schema(
+            schema_root, schema_filename,
         )
         contract = RepoPredictionContract(
             self.benchmark,
@@ -133,7 +137,8 @@ class RepoBenchmarkConfig:
         prompt = build_repo_initial_user_prompt(
             input_id=input_id,
             benchmark=self.benchmark,
-            task_prompt=load_task_prompt(prompt_variant, self.benchmark),
+            task_prompt=(task_prompt if task_prompt is not None
+                         else load_task_prompt(prompt_variant, self.benchmark)),
             task_document=task_document,
             initial_index=initial_index,
         )
@@ -155,7 +160,8 @@ class RepoBenchmarkConfig:
             ),
             "task_prompts": {
                 "raw": f"prompts/baseline/{self.benchmark}.txt",
-                "graph": f"prompts/BEG/{self.benchmark}.txt",
+                "graph": ("prompts/BEG/silentswap1.txt" if self.benchmark == "silentswap"
+                          else f"prompts/BEG/{self.benchmark}.txt"),
             },
             "prediction_schema_filename": self.prediction_schema_filename,
             "grounding_profile": self.grounding_profile,

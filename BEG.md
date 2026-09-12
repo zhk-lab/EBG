@@ -2,31 +2,24 @@
 
 ## 1. 方法目标
 
-BEG 用确定性的行为图帮助模型监督长程 Agent。它不替模型判断问题，而是把 Repo 或 Trace 中分散的事实组织成可检索的 Evidence、Behavior 和关系边，使模型更容易找到完整行为路径并精确定位答案。
+BEG 以确定性规则将代码仓库或执行轨迹中的分散证据组织为行为证据图，支持模型对长程 Agent 的行为进行分析与问题定位。 代码仓库和执行轨迹的总称叫什么。
 
-```text
-Repo：完整任务文档 + 排序文件目录
-      → search/read 局部行为图
-      → finish
-
-Trace：完整原始轨迹
-       → Trace 行为图
-       → finish
-```
-
-模型读取的不是完整 JSON 图，也不是丢掉边的普通文件文本，而是一个**语义闭合的局部行为图**：相关节点、直接关系、连续源码或完整事件和精确位置同时出现。程序负责检索和自动补齐局部路径，模型不需要自己沿多个 ID 连续跳转。
-
-### 指标目标
-
-BEG 的目标是 benchmark 指标高于 Raw baseline，同时消耗更少的总 token。它针对 baseline 的三类主要负担进行设计。
-
-**提高语义指标。** Raw baseline 只提供普通文件目录或原始长轨迹，模型需要自己寻找相关文件、任务边界和执行结果。BEG 先把 Evidence 组合成完整 Behavior：Repo 使用 `path + symbol` 组织代码行为并保留 `calls/feeds`，Trace 使用 `task_id` 组织需求履行链并保留直接的 `informs/supersedes`。模块六再把同一张图整理为模型可连续阅读的对齐式 compact 文本，明确区分直接 Root 与结构邻居，减少模型自行拼接或误判跨函数事实的负担；Trace 仍使用完整 Task Scope JSON。
-
-**提高定位指标。** Raw baseline 给模型的是一段段普通文本，模型即使理解了问题，也容易只指出整个文件、整个 Symbol，或只定位结果行，无法准确说明哪些原文共同支撑判断。BEG 从模块一开始就为每条 Evidence 保存真实文件、Symbol、行号或 turn；Behavior 将结果锚点与其触发条件绑定，关系边也保存连接发生的位置。局部图把这些位置和原文放在对应节点旁边，使最终答案能够落到真正支撑条件和结果的精确 Evidence，而不是宽泛的相关区域。
-
-**减少 token。** Raw baseline 的无序目录和长文件容易带来更多 search/read 轮次，并在多轮上下文中重复发送完整文件。BEG 用排序目录优先暴露高相关入口；局部图先固定与读取意图对应的最小 Root 集合，再展开少量直接相关的一跳邻居。Root 保留完整源码；邻居能精确对应 Behavior 时只返回相关源码，无法可靠判断时回退到完整 Symbol。源码行全局去重，节省出的预算不再用于补入无关 Root。超出单次预算的明确 Symbol 通过 search 获得稳定的 root 级 Read ID 后按需读取。
-
-以上是 BEG 必须在实现中真正保证的机制，而不是预设的实验结论。最终仍需在相同 AgentLoop、模型配置、样本和 Judge 下，与 Raw baseline 配对验证语义、定位和总 token。
+             Agent Context
+             /           \
+      Workspace       Execution History
+        (Repo)             (Trace)
+             \           /
+          确定性提取与组织
+                  ↓
+     Behavioral Evidence Graph
+       原始证据 · 行为单元 · 关系
+                  ↓
+           面向模型的证据呈现
+             /           \
+      Repo 局部图      Trace 任务图
+             \           /
+              模型监督
+          行为分析 · 问题定位
 
 ## 2. 模块一：Evidence Intake
 
@@ -568,3 +561,13 @@ Repo 达到压缩阈值或服务端拒绝上下文长度时触发压缩：清理
 旧目录迁移需在该实验停止写入后执行：`python -m scripts.main.migrate_layout --experiment-name specgap/deepseek_flash/BEG`。加 `--check` 只检查路径和冲突；不指定实验名时处理 `experiments/` 下的全部实验。迁移保留原始答案、响应、分数和断点，合并旧汇总，并更新 Judge 续跑所用的预测路径。
 
 配置入口：`scripts/model_config.py`、`agentloop/config.py`、`tracereview/config.py`；批量默认值见 `scripts/main/predict.py` 与 `scripts/main/judge.py`。
+
+
+
+### 为什么指标会高
+
+BEG 的目标是 benchmark 指标高于 Raw baseline，同时消耗更少的总 token。它针对 baseline 的三类主要负担进行设计。
+
+**提高语义指标。** Raw baseline 只提供普通文件目录或原始长轨迹，模型需要自己寻找相关文件、任务边界和执行结果。BEG 先把 Evidence 组合成完整 Behavior：Repo 使用 `path + symbol` 组织代码行为并保留 `calls/feeds`，Trace 使用 `task_id` 组织需求履行链并保留直接的 `informs/supersedes`。模块六再把同一张图整理为模型可连续阅读的对齐式 compact 文本，明确区分直接 Root 与结构邻居，减少模型自行拼接或误判跨函数事实的负担；Trace 仍使用完整 Task Scope JSON。
+
+**提高定位指标。** Raw baseline 给模型的是一段段普通文本，模型即使理解了问题，也容易只指出整个文件、整个 Symbol，或只定位结果行，无法准确说明哪些原文共同支撑判断。BEG 从模块一开始就为每条 Evidence 保存真实文件、Symbol、行号或 turn；Behavior 将结果锚点与其触发条件绑定，关系边也保存连接发生的位置。局部图把这些位置和原文放在对应节点旁边，使最终答案能够落到真正支撑条件和结果的精确 Evidence，而不是宽泛的相关区域。

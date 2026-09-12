@@ -19,6 +19,7 @@ _PROMPT_FILES: dict[tuple[str, str], Path] = {
     for variant in ("BEG", "baseline")
     for benchmark in ("specgap", "silentswap", "feedbacktrace")
 }
+_PROMPT_FILES[("BEG", "silentswap")] = Path("BEG/silentswap1.txt")
 
 def load_task_prompt(
     variant: PromptVariant,
