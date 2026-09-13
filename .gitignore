@@ -36,7 +36,7 @@ build/
 evaluation/*/artifacts/
 experiments/**/runs/
 experiments/**/judges/
-
+analysis_experiment
 experiments/
 # Editors and operating systems
 .vscode/
