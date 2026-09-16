@@ -41,6 +41,7 @@ class GraphBackend:
         minimal_roots: bool = True,
         expand_neighbors: bool = True,
         document_quotes: bool = False,
+        expansion_hops: int = 1,
     ) -> None:
         try:
             retriever = LocalGraphRetriever(
@@ -52,6 +53,7 @@ class GraphBackend:
                 compact_edges=compact_rendering,
                 minimal_roots=minimal_roots,
                 expand_neighbors=expand_neighbors,
+                expansion_hops=expansion_hops,
             )
         except RetrievalError as error:
             raise BackendError(str(error)) from error
@@ -104,6 +106,7 @@ class GraphBackend:
                 f"minimal_roots={minimal_roots}",
                 f"expand_neighbors={expand_neighbors}",
                 *(["document_quotes=True"] if document_quotes else []),
+                *([f"expansion_hops={expansion_hops}"] if expansion_hops != 1 else []),
             ]
         )
 

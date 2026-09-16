@@ -196,7 +196,7 @@ class PredictionTests(unittest.TestCase):
                 observed_spans=[EvidenceSpan("pkg/api.py", "public", 1, 5)],
             )
 
-    def test_citations_bridge_only_verified_blank_lines(self) -> None:
+    def test_citations_bridge_only_verified_non_code_lines(self) -> None:
         schema = load_prediction_schema(PROJECT_ROOT / "schemas", "specgap")
         finding = {
             "finding_id": "F001", "claim": "Two functions return values.",
@@ -208,12 +208,12 @@ class PredictionTests(unittest.TestCase):
             }],
         }
         spans = [EvidenceSpan("pkg/api.py", "first", 1, 2), EvidenceSpan("pkg/api.py", "second", 4, 5)]
-        for gap in ("", " \t", "hidden_call()", "# hidden comment"):
+        for gap in ("", " \t", "hidden_call()", "# hidden comment", "hidden_call() # comment"):
             with self.subTest(gap=gap):
                 contract = RepoPredictionContract("specgap", schema, source_texts={
                     "pkg/api.py": f"def first():\n    return 1\n{gap}\ndef second():\n    return 2\n",
                 })
-                if not gap.strip():
+                if not gap.strip() or gap.startswith("#"):
                     result = contract.validate({"findings": [finding]}, input_id="sg_blank", observed_spans=spans)
                     self.assertEqual(result["findings"], [finding])
                 else:
@@ -224,6 +224,21 @@ class PredictionTests(unittest.TestCase):
                 contract = RepoPredictionContract("specgap", schema, source_texts=sources)
                 with self.assertRaises(PredictionGroundingError):
                     contract.validate({"findings": [finding]}, input_id="sg_blank", observed_spans=spans)
+
+    def test_string_contents_are_not_ignorable_comments_or_blanks(self) -> None:
+        from evaluation_core.contracts import _non_code_lines
+        source = 'text = """\n# string content\n\n"""\n# actual comment\n\n'
+        self.assertEqual(_non_code_lines("pkg/api.py", source), {5, 6})
+        self.assertEqual(_non_code_lines("pkg/api.py", 'text = """\n# unfinished'), set())
+
+    def test_verified_non_code_at_citation_boundaries_and_file_end(self) -> None:
+        from evaluation_core.contracts import _observed_range_contains
+        source = '# leading\nx = 1\n# trailing\n'
+        spans = (EvidenceSpan("a.py", "module", 2, 2),)
+        self.assertTrue(_observed_range_contains(spans, "a.py", 1, 3, source))
+        self.assertFalse(_observed_range_contains(spans, "a.py", 1, 4, source))
+        self.assertFalse(_observed_range_contains((), "a.py", 1, 3, source))
+        self.assertFalse(_observed_range_contains(spans, "a.py", 1, 3, '# leading\nx = 1\nhidden()\n'))
 
     def test_adjacent_read_chunks_jointly_ground_one_reported_range(self) -> None:
         schema = load_prediction_schema(PROJECT_ROOT / "schemas", "specgap")

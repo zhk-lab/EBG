@@ -42,7 +42,7 @@ from scripts.model_config import (
     apply_model_settings,
     public_settings,
 )
-from tracereview import (
+from analysis_experiment.performance_vs_input_size.scripts.tracereview import (
     DEFAULT_CONFIG as TRACE_REVIEW_CONFIG,
     TraceReview,
     prepare_trace_request,
@@ -51,7 +51,15 @@ from tracereview import (
 )
 
 
-def _run(args: argparse.Namespace) -> dict[str, Any]:
+def _run(
+    args: argparse.Namespace,
+    *,
+    backend_factory: Callable[..., Any] | None = None,
+    trace_renderer: Callable[..., Any] | None = None,
+    task_prompt: str | None = None,
+    max_rounds: int | None = None,
+    tool_result_budget: int | None = None,
+) -> dict[str, Any]:
     artifact_root = (
         Path(args.artifact_root)
         if args.artifact_root
@@ -62,10 +70,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.benchmark == "feedbacktrace":
         if args.arm == "graph":
             graph = _load_graph(artifact_root, args.input_id)
-            view = render_trace_view(graph)
+            view = (trace_renderer or render_trace_view)(graph)
             messages = build_trace_review_messages(
                 input_id=view.input_id,
-                task_prompt=load_task_prompt("BEG", "feedbacktrace"),
+                task_prompt=(task_prompt if task_prompt is not None
+                             else load_task_prompt("BEG", "feedbacktrace")),
                 trace_view=view.text,
             )
             prompt_variant = "BEG"
@@ -124,11 +133,15 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if bundle.task_document is None:
         raise AgentLoopError("Repo benchmark bundle lacks its task document")
     benchmark_config = repo_benchmark_config(args.benchmark)
+    if max_rounds is not None:
+        benchmark_config = replace(benchmark_config, max_rounds=max_rounds)
     loop_config = (
         replace(AGENTLOOP_CONFIG, format_repair_attempts=1)
         if args.benchmark == "silentswap"
         else AGENTLOOP_CONFIG
     )
+    if tool_result_budget is not None:
+        loop_config = replace(loop_config, tool_result_budget=tool_result_budget)
     benchmark_config.validate_for(bundle.benchmark)
     count_directory_tokens = token_counter(DIRECTORY_ENCODING)
     prompt_variant = "baseline" if args.arm == "raw" else "BEG"
@@ -155,13 +168,14 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             encoding_name=DIRECTORY_ENCODING,
         )
         directory = _load_json(directory_root / "ranked_directory.json")
-        backend = GraphBackend(
+        backend = (backend_factory or GraphBackend)(
             bundle,
             graph,
             directory,
             count_tokens=count_directory_tokens,
         )
-        if backend.initial_index_tokens != int(directory_summary["token_count"]):
+        if (backend_factory is None
+                and backend.initial_index_tokens != int(directory_summary["token_count"])):
             raise AgentLoopError("Ranked Directory token count changed during loading")
     module7 = benchmark_config.bind_module7(
         args.schema_root,
@@ -171,6 +185,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         initial_index=backend.initial_index,
         prompt_variant=prompt_variant,
         source_texts={artifact.path: artifact.content for artifact in bundle.repo_artifacts},
+        task_prompt=task_prompt,
     )
     prepared = prepare_initial_request(
         module7.initial_user_prompt,

@@ -176,7 +176,7 @@ class HarnessTests(unittest.TestCase):
         self.code.write_text('from helper import work\nclass RetryClient:\n    def send(self, request):\n        return work(request)\n', encoding='utf-8')
         (self.repo / 'src/helper.py').write_text('def work(request):\n    return request\n', encoding='utf-8', newline='')
         entries = self.build()['evidence_groups']['R1']['actual']['repo']
-        neighbors = [r for r in entries if 'context' in r]
+        neighbors = [r for r in entries if r.get('role') == 'neighbor']
         self.assertTrue(neighbors)
         self.assertIn('calls', neighbors[0]['context'])
         self.assertEqual(neighbors[0]['content'], 'def work(request):\n    return request\n')

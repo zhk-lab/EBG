@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from .render import render, tokens
 from .storage import HarnessError, Store, dumps
+from .source_refs import SourceReader, pack_output, unpack_output
 
 
 def child_ref(ref: str, key: str | int) -> str:
@@ -20,7 +21,7 @@ class OutputPages:
         self.store, self.budget = store, budget
 
     def save(self, owner: str, value: Any) -> str:
-        data = dumps(value)
+        data = dumps(pack_output(value))
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             kind, _, identifier = owner.partition(':')
@@ -52,7 +53,7 @@ class OutputPages:
                     value = value[int(key)] if isinstance(value, list) else value[key]
         except (KeyError, IndexError, TypeError, ValueError) as error:
             raise HarnessError("Invalid read_ref; copy one from the tool response.") from error
-        return value
+        return unpack_output(value, SourceReader(self.store))
 
     def read(self, owner: str, ref: str, offset: int = 0) -> str:
         if offset < 0:
@@ -94,6 +95,16 @@ class OutputPages:
             entry["content"] = content
             if not self.fits(result):
                 del entry["content"]
+                if isinstance(content, dict):
+                    for field in ('component', 'node', 'role', 'root'):
+                        if field in content:
+                            entry[field] = content[field]
+                            if not self.fits(result):
+                                del entry[field]
+                    if 'relations' in content:
+                        entry['relations_ref'] = child_ref(entry['read_ref'], 'relations')
+                        if not self.fits(result):
+                            del entry['relations_ref']
                 if isinstance(content, dict) and isinstance(content.get('content'), str):
                     # Keep enough identity to choose an excerpt without opening
                     # another metadata directory before reaching its raw text.

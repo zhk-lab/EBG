@@ -40,7 +40,12 @@ def build_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
     evidence = build_evidence(bundle)
     behaviors = build_behaviors(bundle, evidence)
     edges = build_edges(bundle, evidence, behaviors)
-    return {**build_graph(bundle, evidence, behaviors, edges), "pairs": pairs, "signals": signals}
+    graph = build_graph(bundle, evidence, behaviors, edges)
+    for node in graph['evidence']:
+        event_id = node['locator']['original_evidence_id']
+        node.pop('content')
+        node['event_refs'] = pairs.get(event_id, [event_id])
+    return {**graph, "pairs": pairs, "signals": signals}
 
 
 def matched_events(requirement: dict[str, Any], events: list[dict[str, Any]], paths: list[str],

@@ -5,13 +5,14 @@ from __future__ import annotations
 import ast
 import re
 import textwrap
+from collections.abc import Callable
 from typing import Any
 
 from .repository import module_statement_span
 
 
 def value_contexts(contexts: list[dict[str, Any]], text: str,
-                   paths: set[str]) -> list[dict[str, Any]]:
+                   paths: set[str], *, read_source: Callable | None = None) -> list[dict[str, Any]]:
     """Locate explicit values, without interpreting prose as a symbol name."""
     terms = set(re.findall(r'`([A-Za-z_][A-Za-z_0-9]*)`', text))
     terms.update(re.findall(r'\b[A-Z][A-Z_0-9]{2,}\b', text))
@@ -24,7 +25,7 @@ def value_contexts(contexts: list[dict[str, Any]], text: str,
     for context in contexts:
         if not context['path'].endswith('.py') or (paths and context['path'] not in paths):
             continue
-        code = context['source']
+        code = read_source(context) if read_source else context['source']
         if not terms.intersection(re.findall(r'[a-z_][a-z_0-9]*', code.casefold())):
             continue
         try:
@@ -61,8 +62,12 @@ def value_contexts(contexts: list[dict[str, Any]], text: str,
             lines = code.splitlines(keepends=True)
             for line, _ in matches:
                 first, last = module_statement_span(context['path'], code, line, line)
-                result.append({**context, 'lines': [first, last],
-                               'source': ''.join(lines[first - 1:last]), 'match': basis})
+                item = {**context, 'lines': [first, last], 'match': basis}
+                if 'source_ref' in item:
+                    item['source_ref'] = {**item['source_ref'], 'lines': [first, last]}
+                else:
+                    item['source'] = ''.join(lines[first - 1:last])
+                result.append(item)
         else:
             result.append({**context, 'match': basis})
     return result
@@ -103,6 +108,8 @@ def share_repo_excerpts(groups: dict[str, Any]) -> None:
     seen = set()
     for group in groups.values():
         for entry in group.get('actual', {}).get('repo', []):
+            if 'content' not in entry:
+                continue
             key = entry['source'], entry['content']
             if key in seen:
                 entry['content_ref'] = entry['read_ref']

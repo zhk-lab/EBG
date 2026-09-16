@@ -27,7 +27,7 @@ COMPACT_LOCAL_GRAPH_TOKENS = 32_768
 
 
 class LocalGraphRetriever:
-    """Search a complete Repo graph and render one-hop linear Local Graphs."""
+    """Search a Repo graph and render Local Graphs with bounded expansion depth."""
 
     def __init__(
         self,
@@ -40,7 +40,12 @@ class LocalGraphRetriever:
         compact_edges: bool = False,
         minimal_roots: bool = False,
         expand_neighbors: bool = True,
+        expansion_hops: int = 1,
     ) -> None:
+        if type(expansion_hops) is not int or not 1 <= expansion_hops <= 3:
+            raise RetrievalError("expansion_hops must be 1, 2, or 3")
+        self.expansion_hops = expansion_hops
+        self.last_read_stats: dict[str, Any] = {}
         if bundle.benchmark not in {"specgap", "silentswap"}:
             raise RetrievalError("Local Graph retrieval supports only Repo benchmarks")
         try:
@@ -308,7 +313,9 @@ class LocalGraphRetriever:
             graphs.extend(trial_graphs)
             seen_full_nodes = trial_full
             seen_behavior_ids = trial_behaviors
-        return {"read_id": read_id, "graphs": graphs}
+        value = {"read_id": read_id, "graphs": graphs}
+        self._expand_deeper(value, seen_full_nodes, seen_behavior_ids, token_budget, counter)
+        return value
 
     def _budgeted_minimal_roots(
         self,
@@ -408,6 +415,49 @@ class LocalGraphRetriever:
     ) -> dict[str, Any]:
         root_endpoint = root_key[:2]
         root_behaviors = self._root_behaviors(root_key)
+        selected = self._selected_neighbor_edges(root_key)
+
+        if root_key in seen_full_nodes:
+            root: dict[str, Any] = {"ref": self._node_ref(root_key)}
+        else:
+            root = self._node(
+                root_key,
+                behaviors=(
+                    root_behaviors
+                    if self._is_sliced_module_root(root_key)
+                    else None
+                ),
+                source_evidence_ids=self.module_root_evidence_ids.get(
+                    root_endpoint, ()
+                ),
+            )
+            document_section = self.document_section_by_endpoint.get(root_endpoint)
+            if document_section:
+                root["document_section"] = document_section
+            seen_full_nodes.add(root_key)
+            seen_behavior_ids.pop(root_key, None)
+        paths: list[dict[str, Any]] = []
+        for edge in selected:
+            neighbor_endpoint = self._other_endpoint(edge, root_endpoint)
+            neighbor_key = self._neighbor_key(neighbor_endpoint, edge)
+            if neighbor_key is None:
+                continue
+            step = self._neighbor_step(edge, root_key, neighbor_key, seen_full_nodes, seen_behavior_ids)
+            paths.append(
+                {
+                    "path_id": f"P{len(paths) + 1}",
+                    "steps": [step],
+                }
+            )
+
+        return {
+            "root": root,
+            "paths": paths,
+        }
+
+    def _selected_neighbor_edges(self, root_key: NodeKey) -> list[dict[str, Any]]:
+        root_endpoint = root_key[:2]
+        root_behaviors = self._root_behaviors(root_key)
         root_evidence = {
             evidence_id
             for behavior in root_behaviors
@@ -439,85 +489,117 @@ class LocalGraphRetriever:
             selected = distinct
         selected = selected[:MAX_EXPANDED_EDGES]
 
-        if root_key in seen_full_nodes:
-            root: dict[str, Any] = {"ref": self._node_ref(root_key)}
-        else:
-            root = self._node(
-                root_key,
-                behaviors=(
-                    root_behaviors
-                    if self._is_sliced_module_root(root_key)
-                    else None
-                ),
-                source_evidence_ids=self.module_root_evidence_ids.get(
-                    root_endpoint, ()
-                ),
-            )
-            document_section = self.document_section_by_endpoint.get(root_endpoint)
-            if document_section:
-                root["document_section"] = document_section
-            seen_full_nodes.add(root_key)
-            seen_behavior_ids.pop(root_key, None)
-        paths: list[dict[str, Any]] = []
-        for edge in selected:
-            neighbor_endpoint = self._other_endpoint(edge, root_endpoint)
-            neighbor_key = self._neighbor_key(neighbor_endpoint, edge)
-            if neighbor_key is None:
-                continue
-            matched_behaviors = (
-                self._matching_neighbor_behaviors(
-                    edge, root_endpoint, neighbor_key
-                )
-                if self.behavior_level_neighbors
-                else None
-            )
-            rendered_behaviors = matched_behaviors
-            if neighbor_key in seen_full_nodes:
-                node: dict[str, Any] = {"ref": self._node_ref(neighbor_key)}
-            elif matched_behaviors is None:
-                node = self._node(neighbor_key)
-                seen_full_nodes.add(neighbor_key)
-                seen_behavior_ids.pop(neighbor_key, None)
-            else:
-                already_seen = seen_behavior_ids.setdefault(neighbor_key, set())
-                unseen = [
-                    behavior
-                    for behavior in matched_behaviors
-                    if str(behavior["behavior_id"]) not in already_seen
-                ]
-                if not unseen:
-                    node = {"ref": self._node_ref(neighbor_key)}
-                else:
-                    node = self._node(neighbor_key, behaviors=unseen)
-                    already_seen.update(
-                        str(behavior["behavior_id"]) for behavior in unseen
-                    )
-                    rendered_behaviors = unseen
-            edge_text = (
-                self._compact_edge_text(
-                    edge,
-                    root_key,
-                    neighbor_key,
-                    rendered_behaviors,
-                )
-                if self.compact_edges
-                else self._edge_text(edge)
-            )
-            paths.append(
-                {
-                    "path_id": f"P{len(paths) + 1}",
-                    "steps": [
-                        {
-                            "edge": edge_text,
-                            "node": node,
-                        }
-                    ],
-                }
-            )
+        return selected
 
-        return {
-            "root": root,
-            "paths": paths,
+    def _neighbor_step(
+        self, edge: dict[str, Any], root_key: NodeKey, neighbor_key: NodeKey,
+        seen_full_nodes: set[NodeKey], seen_behavior_ids: dict[NodeKey, set[str]],
+    ) -> dict[str, Any]:
+        root_endpoint = root_key[:2]
+        matched_behaviors = (
+            self._matching_neighbor_behaviors(
+                edge, root_endpoint, neighbor_key
+            )
+            if self.behavior_level_neighbors
+            else None
+        )
+        rendered_behaviors = matched_behaviors
+        if neighbor_key in seen_full_nodes:
+            node: dict[str, Any] = {"ref": self._node_ref(neighbor_key)}
+        elif matched_behaviors is None:
+            node = self._node(neighbor_key)
+            seen_full_nodes.add(neighbor_key)
+            seen_behavior_ids.pop(neighbor_key, None)
+        else:
+            already_seen = seen_behavior_ids.setdefault(neighbor_key, set())
+            unseen = [
+                behavior
+                for behavior in matched_behaviors
+                if str(behavior["behavior_id"]) not in already_seen
+            ]
+            if not unseen:
+                node = {"ref": self._node_ref(neighbor_key)}
+            else:
+                node = self._node(neighbor_key, behaviors=unseen)
+                already_seen.update(
+                    str(behavior["behavior_id"]) for behavior in unseen
+                )
+                rendered_behaviors = unseen
+        edge_text = (
+            self._compact_edge_text(
+                edge,
+                root_key,
+                neighbor_key,
+                rendered_behaviors,
+            )
+            if self.compact_edges
+            else self._edge_text(edge)
+        )
+        return {"edge": edge_text, "node": node}
+
+    def _expand_deeper(
+        self,
+        value: dict[str, Any],
+        seen_full: set[NodeKey],
+        seen_behaviors: dict[NodeKey, set[str]],
+        token_budget: int,
+        counter: GraphTokenCounter,
+    ) -> None:
+        """Append whole neighbor units breadth first, preserving the one-hop view."""
+        keys = {self._node_ref(self._context_key(c)): self._context_key(c)
+                for c in self.graph["source_contexts"]}
+
+        def node_key(node: dict[str, Any]) -> NodeKey:
+            if "ref" in node:
+                return keys[node["ref"]]
+            return (node["path"], node["symbol"], *node["lines"])
+
+        visited = {node_key(g["root"]) for g in value["graphs"]}
+        depths = {key: 0 for key in visited}
+        frontier = []
+        for graph in value["graphs"]:
+            for path in graph["paths"]:
+                key = node_key(path["steps"][-1]["node"])
+                if key not in visited:
+                    visited.add(key)
+                    depths[key] = 1
+                    frontier.append((graph, key, path["steps"]))
+        rejected = 0
+        for depth in range(2, self.expansion_hops + 1):
+            following = []
+            for graph, parent, prefix in frontier:
+                for edge in self._selected_neighbor_edges(parent):
+                    endpoint = self._other_endpoint(edge, parent[:2])
+                    key = self._neighbor_key(endpoint, edge)
+                    if key is None or key in visited:
+                        continue
+                    trial_full = set(seen_full)
+                    trial_behaviors = {k: set(v) for k, v in seen_behaviors.items()}
+                    step = self._neighbor_step(edge, parent, key, trial_full, trial_behaviors)
+                    # Ancestor evidence has already been rendered earlier in this read.
+                    ancestors = [{"edge": s["edge"], "node": {"ref": self._node_ref(node_key(s["node"]))}}
+                                 for s in prefix]
+                    path = {"path_id": f"P{len(graph['paths']) + 1}", "steps": ancestors + [step]}
+                    graph["paths"].append(path)
+                    if counter(value) > token_budget:
+                        graph["paths"].pop()
+                        rejected += 1
+                        continue
+                    seen_full.clear()
+                    seen_full.update(trial_full)
+                    seen_behaviors.clear()
+                    seen_behaviors.update(trial_behaviors)
+                    visited.add(key)
+                    depths[key] = depth
+                    following.append((graph, key, path["steps"]))
+            frontier = following
+        self.last_read_stats = {
+            "requested_hops": self.expansion_hops,
+            "actual_depth": max(depths.values(), default=0),
+            "nodes_by_depth": {str(d): sum(v == d for v in depths.values())
+                               for d in range(self.expansion_hops + 1)},
+            "node_count": len(depths), "budget_rejected_nodes": rejected,
+            "estimated_tokens": counter(value),
         }
 
     def _node(

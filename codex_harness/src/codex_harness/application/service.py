@@ -17,6 +17,8 @@ from .storage import HarnessError, Store
 from .sessions import SessionLog
 from .selection import compact_contexts, enclosing_contexts, share_repo_excerpts, value_contexts
 from .trace import build_trace, matched_events
+from .source_refs import SourceReader
+from .components import components, node_id, relations_by_node
 
 
 class Harness:
@@ -190,6 +192,7 @@ class Harness:
         return result
 
     def _repo_evidence(self, view: dict[str, Any], requirement: dict[str, Any]) -> list[dict[str, Any]]:
+        reader = SourceReader(self.store)
         text = "\n".join(ref["content"] for ref in requirement["refs"])
         text += '\n' + requirement['check']  # Retrieval hint, never a new requirement.
         files = view["files"]
@@ -213,11 +216,13 @@ class Harness:
                 candidates = [c for c in view["contexts"] if c["symbol"] == context["symbol"] and (not paths or c["path"] in paths)]
                 if len({c["path"] for c in candidates}) == 1:
                     selected.append({**context, "match": "path + symbol" if context["path"] in paths else "symbol"})
-        selected.extend(value_contexts(view['contexts'], text, paths))
+        selected.extend(value_contexts(view['contexts'], text, paths, read_source=reader.context))
         for path in sorted(paths):
             if not any(item["path"] == path for item in selected):
                 content = self.store.file(files[path])["content"]
-                selected.append({"path": path, "symbol": "<file>", "lines": [1, max(1, len(content.splitlines()))], "source": content, "match": "path (file context)"})
+                lines = [1, max(1, len(content.splitlines()))]
+                selected.append({"path": path, "symbol": "<file>", "lines": lines,
+                                 "source_ref": {'file_id': files[path], 'lines': lines}, "match": "path (file context)"})
         direct = {(item["path"], item["symbol"]) for item in selected}
         evidence = {e["evidence_id"]: e for e in graph["evidence"]}
         for edge in graph["edges"]:
@@ -232,13 +237,12 @@ class Harness:
                 # A module endpoint can span an entire file. Keep the actual
                 # edge-supported statements, not every unrelated definition.
                 content = self.store.file(files[neighbor[0]])["content"]
-                lines = content.splitlines(keepends=True)
                 for evidence_id in edge["evidence_ids"]:
                     locator = evidence[evidence_id]["locator"]
                     if (locator["path"], locator["symbol"]) == neighbor:
                         first, last = module_statement_span(neighbor[0], content, locator["line_start"], locator["line_end"])
                         selected.append({"path": neighbor[0], "symbol": neighbor[1], "lines": [first, last],
-                                         "source": "".join(lines[first - 1:last]), "context": relation})
+                                         "source_ref": {'file_id': files[neighbor[0]], 'lines': [first, last]}, "context": relation})
                 continue
             for context in view["contexts"]:
                 if (context["path"], context["symbol"]) == neighbor:
@@ -246,21 +250,52 @@ class Harness:
         selected.extend(enclosing_contexts(selected, view['contexts']))
         context_refs = {(c['path'], c['symbol'], tuple(c['lines'])): f"{view['view_id']}:context:{index}"
                         for index, c in enumerate(view['contexts'])}
+        # Keep a containing excerpt once, while retaining every graph node's identity.
+        excerpts = compact_contexts(selected)
+        source_ids = {ref['source_id'] for ref in requirement['refs']}
+        document = '\n'.join(source['content'] for source in view['sources'] if source['id'] in source_ids)
+        document_refs = {}
+        for ref in requirement['refs']:
+            matches = direct_repo_roots(match_graph, ref['content'])
+            values = value_contexts(view['contexts'], ref['content'], paths, read_source=reader.context)
+            matched_values = {(c['path'], c['symbol']) for c in values}
+            for node in direct:
+                if (node[1] in matches.get(node[0], ()) or node in matched_values
+                        or explicit_symbol_match(ref['content'], node[1])
+                        or (node[1] == '<file>' and literal_match(ref['content'], node[0], path=True))):
+                    document_refs.setdefault(node, []).append(ref['source'])
+        component_list = components(direct, graph['edges'], document)
         result = []
-        for context in compact_contexts(selected):
-            first, last = context["lines"]
-            key = context['path'], context['symbol'], tuple(context['lines'])
-            entry = {
-                "source": f"{view['scope']['repo_after']}:{context['path']}::{context['symbol']}@{first}-{last}",
-                "content": context["source"],
-                "read_ref": context_refs.get(key, f"{view['view_id']}:repo:{context['path']}"),
-            }
-            entry.update({key: context[key] for key in ("match", "context") if key in context})
-            if context['path'] in anchors:
-                entry['anchor'] = anchors[context['path']]
-            if context["path"] in view["changes"]:
-                entry["change"] = view["changes"][context["path"]]
-            result.append(entry)
+        shown = {}
+        for component_number, component in enumerate(component_list, 1):
+            relations = relations_by_node(component['edges'], evidence)
+            for node in component['nodes']:
+                contexts = [c for c in selected if (c['path'], c['symbol']) == node]
+                containers = [c for c in excerpts if any(c['path'] == item['path']
+                              and c['lines'][0] <= item['lines'][0] <= item['lines'][1] <= c['lines'][1]
+                              for item in contexts)]
+                for context in containers:
+                    entry = self._repo_entry(view, context, context_refs, reader, anchors)
+                    entry = {'component': f'C{component_number}', 'node': node_id(node),
+                             'role': 'seed' if node in direct else 'neighbor',
+                             'root': node_id(component['root']), **entry}
+                    # The original source may include an enclosing scope. Name it
+                    # through `source`, keeping the actual graph endpoint in `node`.
+                    if node in document_refs:
+                        entry['document_refs'] = document_refs[node]
+                    elif node in direct:
+                        entry['seed_basis'] = 'query hint / source-line path; not a direct document Symbol match'
+                    key = context['path'], tuple(context['lines'])
+                    if key in shown:
+                        entry.pop('content')
+                        entry.pop('_source_ref', None)
+                        entry['content_ref'] = entry['read_ref']
+                        entry['included_in'] = shown[key]
+                    else:
+                        shown[key] = node_id(node)
+                    if relations[node]:
+                        entry['relations'] = relations[node]
+                    result.append(entry)
         # Keep changes (including deletions) beside requirements naming that path.
         for path in view['changes']:
             if literal_match(text, path, path=True):
@@ -268,6 +303,22 @@ class Harness:
                 result.append({**diff, 'match': 'path / before-after diff',
                                'read_ref': f"{view['view_id']}:diff:{path}"})
         return result
+
+    def _repo_entry(self, view, context, context_refs, reader, anchors):
+        first, last = context["lines"]
+        key = context['path'], context['symbol'], tuple(context['lines'])
+        entry = {
+            "source": f"{view['scope']['repo_after']}:{context['path']}::{context['symbol']}@{first}-{last}",
+            "content": reader.context(context),
+            "_source_ref": context.get('source_ref', {'file_id': view['files'][context['path']], 'lines': [first, last]}),
+            "read_ref": context_refs.get(key, f"{view['view_id']}:slice:{first}:{last}:{context['path']}"),
+        }
+        entry.update({key: context[key] for key in ("match", "context") if key in context})
+        if context['path'] in anchors:
+            entry['anchor'] = anchors[context['path']]
+        if context["path"] in view["changes"]:
+            entry["change"] = view["changes"][context['path']]
+        return entry
 
     def group(self, view: dict[str, Any], requirement: dict[str, Any]) -> dict[str, Any]:
         group: dict[str, Any] = {"requirement": self._requirement_originals(requirement)}
@@ -346,8 +397,10 @@ class Harness:
                             for name in sorted(set(snap['files']) | set(uncollected))]}
             if path not in snap['files']:
                 raise HarnessError('File content was not collected in this snapshot.')
+            content = self.store.file(snap['files'][path])['content']
             return {'source': f'{snapshot_id}:{path}',
-                    'content': self.store.file(snap['files'][path])['content']}
+                    'content': content,
+                    '_source_ref': {'file_id': snap['files'][path], 'lines': [1, max(1, len(content.splitlines()))]}}
         if kind == 'files' and identifier == 'index':
             uncollected = view.get('uncollected_files', {})
             return [
@@ -369,7 +422,19 @@ class Harness:
             context = view['contexts'][int(identifier)]
             first, last = context['lines']
             return {'source': f"{view['scope']['repo_after']}:{context['path']}::{context['symbol']}@{first}-{last}",
-                    'content': context['source'], 'file_ref': f"{view_id}:repo:{context['path']}"}
+                    'content': SourceReader(self.store).context(context),
+                    '_source_ref': context.get('source_ref', {'file_id': view['files'][context['path']], 'lines': [first, last]}),
+                    'file_ref': f"{view_id}:repo:{context['path']}"}
+        if kind == 'slice':
+            parts = identifier.split(':', 2)
+            if len(parts) != 3:
+                raise HarnessError('Unknown source slice; use a returned reference.')
+            first, last, path = parts
+            if path not in view['files'] or not first.isdecimal() or not last.isdecimal() or not 1 <= int(first) <= int(last):
+                raise HarnessError('Unknown source slice; use a returned reference.')
+            ref = {'file_id': view['files'][path], 'lines': [int(first), int(last)]}
+            return {'source': f"{view['scope']['repo_after']}:{path}@{first}-{last}",
+                    'content': SourceReader(self.store).read(ref), '_source_ref': ref}
         if kind in {"repo", "diff"}:
             file_id = view["files"].get(identifier)
             old_id = view["baseline"].get(identifier)
@@ -395,4 +460,7 @@ class Harness:
             content = source["content"]
         else:
             raise HarnessError(f"Unknown read kind: {kind}")
-        return {"source": f"{view_id}:{read_id}", "content": content}
+        result = {"source": f"{view_id}:{read_id}", "content": content}
+        if kind == 'repo':
+            result['_source_ref'] = {'file_id': file_id, 'lines': [1, max(1, len(content.splitlines()))]}
+        return result

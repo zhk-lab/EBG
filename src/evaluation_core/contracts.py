@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
+import tokenize
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath, PurePosixPath
@@ -347,27 +349,38 @@ def _observed_range_contains(
     end: int,
     source_text: str | None = None,
 ) -> bool:
-    """Cover the citation with read chunks, allowing verified blank gaps between them."""
+    """Cover citations with read chunks, allowing verified non-code gaps."""
 
-    cursor = start
-    for span in sorted(
-        (item for item in observed_spans if item.path == path),
-        key=lambda item: (item.start, item.end),
-    ):
-        if span.end < cursor:
+    missing = set(range(start, end + 1))
+    overlaps_read = False
+    for span in observed_spans:
+        if span.path != path or span.end < start or span.start > end:
             continue
-        if span.start > cursor:
-            if cursor == start or source_text is None:
-                return False
-            lines = source_text.splitlines()
-            if span.start - 1 > len(lines) or any(
-                line.strip() for line in lines[cursor - 1 : span.start - 1]
-            ):
-                return False
-        cursor = max(cursor, span.end + 1)
-        if cursor > end:
-            return True
-    return False
+        overlaps_read = True
+        missing.difference_update(range(max(start, span.start), min(end, span.end) + 1))
+    if not overlaps_read:
+        return False
+    if not missing:
+        return True
+    return source_text is not None and missing <= _non_code_lines(path, source_text)
+
+
+def _non_code_lines(path: str, source_text: str) -> set[int]:
+    """Recognize Python comments without treating strings or inline code as comments."""
+    lines = source_text.splitlines()
+    blank = {i for i, line in enumerate(lines, 1) if not line.strip()}
+    if PurePosixPath(path).suffix not in {".py", ".pyi"}:
+        return blank
+    ignorable = set(range(1, len(lines) + 1))
+    ignored_tokens = {tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE,
+                      tokenize.INDENT, tokenize.DEDENT, tokenize.ENDMARKER}
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(source_text).readline):
+            if token.type not in ignored_tokens:
+                ignorable.difference_update(range(token.start[0], token.end[0] + 1))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return set()  # Incomplete source cannot establish which lines are comments.
+    return ignorable
 
 
 def _normalize_path(path: str) -> str:

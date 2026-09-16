@@ -20,10 +20,12 @@ from ..beg.graph_assembly import build_graph
 from ..beg.relation_linking import build_edges
 
 from .storage import HarnessError, Store
+from .source_refs import SourceReader, referenced_context
+from .matching import code_terms
 
 
 SKIP_DIRS = {".git", ".venv", ".venv-harness", "venv", "node_modules", "__pycache__", ".beg-harness", ".state", ".tmp", ".tmp-tests", "dist", "build"}
-GRAPH_VERSION = 1
+GRAPH_VERSION = 2
 
 
 def bundle(root: Path, artifacts: list[RepoArtifact], document: str = "") -> VisibleBundle:
@@ -139,6 +141,7 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
     contexts = []
     notes = []
     built = 0
+    reader = SourceReader(store)
     for path, file_id in sorted(files.items()):
         record = store.file(file_id)
         item = artifact(root, path, record["content"])
@@ -148,10 +151,9 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
             if item and item.content.strip():
                 local = bundle(root, [item])
                 spans = source_symbol_spans(local)
-                lines = item.content.splitlines(keepends=True)
                 fragment["contexts"] = [
                     {"path": path, "symbol": span.symbol, "lines": [span.line_start, span.line_end],
-                     "source": "".join(lines[span.line_start - 1:span.line_end])}
+                     "source_ref": {'file_id': file_id, 'lines': [span.line_start, span.line_end]}}
                     for values in spans.values() for span in values
                 ]
                 try:
@@ -161,6 +163,11 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
                     fragment["evidence"] = []
                     fragment["behaviors"] = []
                     fragment["notes"].append(f"{path}: BEG atomization unavailable ({error}); raw source retained")
+            fragment['contexts'] = [referenced_context(c, files) for c in fragment['contexts']]
+            for node in fragment['evidence']:
+                node['terms'] = code_terms(node.pop('content'))
+                loc = node['locator']
+                node['source_ref'] = {'file_id': file_id, 'lines': [loc['line_start'], loc['line_end']]}
             store.save_fragment(file_id, fragment)
             built += 1
         contexts.extend(fragment["contexts"])
@@ -171,6 +178,8 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
         mapping = {}
         for original in fragment["evidence"]:
             node = copy.deepcopy(original)
+            node['content'] = reader.read(node.pop('source_ref'))
+            node.pop('terms', None)
             node["evidence_id"] = f"E{len(evidence) + 1:06d}"
             mapping[original["evidence_id"]] = node["evidence_id"]
             evidence.append(node)
@@ -184,4 +193,10 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
         return {"evidence": [], "behaviors": [], "source_contexts": [], "edges": []}, contexts, notes, built
     combined = bundle(root, artifacts)
     edges = build_edges(combined, evidence, behaviors)
-    return build_graph(combined, evidence, behaviors, edges), contexts, notes, built
+    graph = build_graph(combined, evidence, behaviors, edges)
+    for node in graph['evidence']:
+        node['terms'] = code_terms(node.pop('content'))
+        loc = node['locator']
+        node['source_ref'] = {'file_id': files[loc['path']], 'lines': [loc['line_start'], loc['line_end']]}
+    graph['source_contexts'] = [referenced_context(c, files) for c in graph['source_contexts']]
+    return graph, contexts, notes, built

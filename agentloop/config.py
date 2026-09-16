@@ -19,7 +19,7 @@ class AgentLoopConfig:
     working_prompt_trigger: int = 131_072
     compression_target: int = 98_304
     index_budget: int = 3_072
-    tool_result_budget: int = 32_768
+    tool_result_budget: int = 65_536
     max_atomic_unit_tokens: int = 65_536
     max_search_hits: int = 12
     max_exact_path_hits: int = 12

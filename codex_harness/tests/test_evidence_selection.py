@@ -40,6 +40,68 @@ def unrelated():
 
 
 class EvidenceSelectionTests(unittest.TestCase):
+    def test_complete_one_hop_is_grouped_and_does_not_expand_neighbors(self):
+        source = 'def launch():\n    return ' + ' + '.join(f'helper{i}()' for i in range(7)) + '\n\n'
+        source += '\n\n'.join(f'def helper{i}():\n    return ' + ('outside()' if i == 0 else str(i))
+                              for i in range(7))
+        source += '\n\ndef outside():\n    return "outside second hop"\n'
+        (self.repo / 'app.py').write_text(source, encoding='utf-8')
+        _, result = self.build(['Inspect `app.py` and `launch`.'])
+        entries = result['evidence_groups']['R1']['actual']['repo']
+        self.assertEqual(entries[0]['node'], 'app.py::launch')
+        self.assertEqual({e['component'] for e in entries}, {'C1'})
+        self.assertEqual({e['root'] for e in entries}, {'app.py::launch'})
+        self.assertEqual({e['node'] for e in entries}, {'app.py::launch', *(f'app.py::helper{i}' for i in range(7))})
+        calls = [r for r in entries[0]['relations'] if r['type'] == 'calls']
+        self.assertEqual(len(calls), 7)
+        self.assertTrue(all(r['from'] == 'app.py::launch' for r in calls))
+        self.assertNotIn('outside second hop', str(entries))
+
+    def test_shared_neighbor_degree_root_and_original_document_tie_order(self):
+        (self.repo / 'app.py').write_text(
+            'def first():\n    return shared()\n\ndef second():\n    return shared() + extra()\n\n'
+            'def shared():\n    return 1\n\ndef extra():\n    return 2\n', encoding='utf-8')
+        _, result = self.build(['Inspect `app.py`, `first` and `second`.'])
+        entries = result['evidence_groups']['R1']['actual']['repo']
+        self.assertEqual(entries[0]['node'], 'app.py::second')
+        self.assertEqual({e['node'] for e in entries if e['role'] == 'seed'}, {'app.py::first', 'app.py::second'})
+        self.assertEqual(sum('def shared()' in e.get('content', '') for e in entries), 1)
+        shared = next(e for e in entries if e['node'] == 'app.py::shared')
+        self.assertEqual({r['from'] for r in shared['relations'] if r['type'] == 'calls'},
+                         {'app.py::first', 'app.py::second'})
+
+    def test_every_scope_using_explicit_value_is_a_seed(self):
+        (self.repo / 'app.py').write_text(
+            'def first():\n    return budget_limit\n\ndef second():\n    return budget_limit + 1\n', encoding='utf-8')
+        _, result = self.build(['Inspect `app.py` uses of `budget_limit`.'])
+        entries = result['evidence_groups']['R1']['actual']['repo']
+        self.assertEqual({e['node'] for e in entries if e['role'] == 'seed'}, {'app.py::first', 'app.py::second'})
+
+    def test_root_tie_uses_original_document_order_not_quote_order(self):
+        (self.repo / 'app.py').write_text(
+            'def first():\n    return shared()\n\ndef second():\n    return shared()\n\n'
+            'def shared():\n    return 1\n', encoding='utf-8')
+        quotes = ['Inspect `app.py` and `second`.', 'Inspect `app.py` and `first`.']
+        task, _ = self.build(quotes)
+        source = next(s['id'] for s in self.harness.store.task(task)['sources'] if s['kind'] == 'plan')
+        result = yaml.safe_load(self.harness.build_evidence_groups(task, [
+            {'id': 'R1', 'check': 'Compare the two functions.',
+             'refs': [{'source_id': source, 'quote': quote} for quote in reversed(quotes)]}]))
+        entries = result['evidence_groups']['R1']['actual']['repo']
+        self.assertEqual(entries[0]['node'], 'app.py::second')
+        self.assertEqual(len(entries[0]['document_refs']), 1)
+
+    def test_nested_seeds_keep_identity_and_share_enclosing_source(self):
+        task, result = self.build(['Inspect `runner.py`, `run` and `run.objective`.'])
+        entries = result['evidence_groups']['R1']['actual']['repo']
+        nodes = {entry['node'] for entry in entries if entry.get('role') == 'seed'}
+        self.assertTrue({'runner.py::run', 'runner.py::run.objective'} <= nodes)
+        contents = '\n'.join(entry.get('content', '') for entry in entries)
+        self.assertEqual(contents.count('coefficients = parameters[2:]'), 1)
+        shared = next(entry for entry in entries if entry.get('included_in'))
+        original = yaml.safe_load(self.harness.build_evidence_groups(task, read_ref=shared['content_ref']))
+        self.assertIn('coefficients = parameters[2:]', original['content'])
+
     def setUp(self):
         self.temp = ProjectTemporaryDirectory()
         self.root = self.temp.__enter__()
@@ -142,6 +204,6 @@ class EvidenceSelectionTests(unittest.TestCase):
     def test_containing_excerpts_keep_relations_without_duplicate_bodies(self):
         _, result = self.build(['In `runner.py`, inspect `objective`.'])
         entries = result['evidence_groups']['R1']['actual']['repo']
-        contents = '\n'.join(entry['content'] for entry in entries)
+        contents = '\n'.join(entry.get('content', '') for entry in entries)
         self.assertEqual(contents.count('coefficients = parameters[2:]'), 1)
         self.assertTrue(any('calls' in entry.get('context', '') for entry in entries))

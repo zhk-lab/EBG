@@ -1,6 +1,6 @@
 # 三个 Benchmark 评测结果
 
-更新日期：2026-09-13。
+更新日期：2026-09-14。
 
 以下评分表均为 **BEG / baseline**，每项较高值加粗，每组 100 题。
 
@@ -61,6 +61,8 @@ GLM-5-3（low）的三个 benchmark 均已完整运行；SilentSwap 两阶段串
 | GLM-5-3 (low) | **0.708** / 0.560 | **0.590** / 0.375 | **0.720** / 0.685 |
 
 SilentSwap 的 Flash BEG 使用 V4.1，baseline 为旧 V4，属于跨版本比较。Luna 最新第一阶段有 1 题经额外校验错误反馈后重试补齐。
+
+Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-14 的 `deepseek-flash` 重跑结果保留在 `.tmp/deepseek_flash_20260914_new_model/`，不作为当前正式结果。
 
 ## FeedbackTrace · GLM
 

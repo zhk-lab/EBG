@@ -142,6 +142,13 @@ def _complete(messages, client, store, format_retry):
     saved = store.load_response(1, format_retry=format_retry)
     if saved is not None:
         return saved["content"]
+    output_limit = CONFIG.max_output_tokens
+    for previous_format in range(format_retry):
+        previous_response = store.load_response(1, format_retry=previous_format) or {}
+        if any(choice.get("finish_reason") == "length"
+               for choice in previous_response.get("raw_response", {}).get("choices", [])):
+            output_limit = CONFIG.max_output_tokens * 2
+            break
     stem = store._turn_stem(1, format_retry)
     previous = (store.root / "provider_failures").glob(f"{stem}_retry_*.json")
     first_retry = max((read_json(path)["provider_retry"] for path in previous), default=-1) + 1
@@ -149,7 +156,7 @@ def _complete(messages, client, store, format_retry):
     for retry in range(first_retry, first_retry + CONFIG.network_retries + 1):
         save_request(store, messages, retry=retry, format_retry=format_retry)
         try:
-            response = client.complete(messages, max_output_tokens=CONFIG.max_output_tokens)
+            response = client.complete(messages, max_output_tokens=output_limit)
         except RetryableModelError as error:
             store.save_provider_failure(1, provider_retry=retry, format_retry=format_retry,
                 error=str(error), raw_response=error.raw_response, usage=error.usage)

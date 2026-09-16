@@ -15,7 +15,6 @@ from ..beg.behavior_atomization import _trace_demand_spans, _trace_signal, _trac
 from ..beg.behavior_directory import (
     _CALL_NAME, _IDENTIFIER, _PYTHON_KEYWORDS, _document_code_terms,
     _literal_pattern, _qualified_symbol_aliases,
-    _select_repo_root_symbols,
 )
 
 
@@ -132,9 +131,18 @@ def section_navigation(requirement: dict[str, Any], sources: list[dict[str, Any]
     return candidates
 
 
+def code_terms(content: str) -> dict[str, list[str]]:
+    return {
+        'identifiers': sorted({m.group(1).casefold() for m in _IDENTIFIER.finditer(content)
+                               if m.group(1) not in _PYTHON_KEYWORDS}),
+        'calls': sorted({m.group(1) for m in _CALL_NAME.finditer(content)
+                         if m.group(1) not in _PYTHON_KEYWORDS
+                         and not re.search(r'(?:\bdef|\bclass)\s+$', content[:m.start()])}),
+    }
+
+
 def direct_repo_roots(graph: dict[str, Any], document: str) -> dict[str, tuple[str, ...]]:
-    """Filter BEG navigation candidates to explicit source-supported anchors."""
-    candidates = _select_repo_root_symbols(graph, document)
+    """Keep every explicit source-supported seed, without navigation fallbacks."""
     endpoints = {(b["path"], b["symbol"]) for b in graph["behaviors"]}
     aliases: dict[str, set] = defaultdict(set)
     leaves: dict[str, set] = defaultdict(set)
@@ -156,13 +164,11 @@ def direct_repo_roots(graph: dict[str, Any], document: str) -> dict[str, tuple[s
         endpoint = item["locator"]["path"], item["locator"]["symbol"]
         if endpoint not in endpoints:
             continue
-        for match in _IDENTIFIER.finditer(item["content"]):
-            term = match.group(1)
-            if term not in _PYTHON_KEYWORDS:
-                terms[term.casefold()].add(endpoint)
-        for match in _CALL_NAME.finditer(item["content"]):
-            if match.group(1) not in _PYTHON_KEYWORDS:
-                calls[match.group(1)].add(endpoint)
+        indexed = item['terms'] if 'terms' in item else code_terms(item['content'])
+        for term in indexed['identifiers']:
+            terms[term].add(endpoint)
+        for name in indexed['calls']:
+            calls[name].add(endpoint)
     explicit = set()
     for alias, matches in aliases.items():
         if len(matches) == 1 and explicit_symbol_match(document, alias):
@@ -173,19 +179,16 @@ def direct_repo_roots(graph: dict[str, Any], document: str) -> dict[str, tuple[s
     for scope, matches in scopes.items():
         if len({path for path, symbol in matches}) == 1 and explicit_symbol_match(document, scope):
             explicit.update(matches)
+    definition_names = {name.casefold() for name in leaves}
     for term in _document_code_terms(document):
+        if term.casefold() in definition_names:
+            continue  # Ambiguous definitions cannot become value anchors.
         matches = terms.get(term.casefold(), set())
-        if len(matches) == 1:
-            explicit.update(matches)
+        explicit.update(matches)
     for name, matches in calls.items():
-        if len(matches) == 1 and explicit_symbol_match(document, name):
+        if explicit_symbol_match(document, name):
             explicit.update(matches)
+    result = defaultdict(list)
     for path, symbol in sorted(explicit):
-        if symbol not in candidates.get(path, ()):
-            candidates[path] = (*candidates.get(path, ()), symbol)
-    result = {}
-    for path, symbols in candidates.items():
-        selected = tuple(symbol for symbol in symbols if (path, symbol) in explicit)
-        if selected:
-            result[path] = selected
-    return result
+        result[path].append(symbol)
+    return {path: tuple(symbols) for path, symbols in result.items()}
