@@ -1,15 +1,15 @@
-"""Adapt captured events to BEG while retaining every original event separately."""
+"""Adapt captured events to EBG while retaining every original event separately."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from ..beg.behavior_atomization import build_behaviors
-from ..beg.core.model import TraceEvent, VisibleBundle
-from ..beg.evidence_intake import build_evidence
-from ..beg.graph_assembly import build_graph
-from ..beg.relation_linking import build_edges
+from ..ebg.behavior_atomization import build_behaviors
+from ..ebg.core.model import TraceEvent, VisibleBundle
+from ..ebg.evidence_intake import build_evidence
+from ..ebg.graph_assembly import build_graph
+from ..ebg.relation_linking import build_edges
 
 from .matching import literal_match, trace_signal
 
@@ -28,7 +28,7 @@ def build_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
         event_type = {"user": "user_prompt", "assistant": "assistant_response", "tool_call": "tool_exchange"}[kind]
         if kind == "tool_call":
             result = results.get(event["call_id"])
-            # This wrapper is only an internal BEG adapter, never returned as raw evidence.
+            # This wrapper is only an internal EBG adapter, never returned as raw evidence.
             text = f"Tool invocation:\n{text}"
             if result:
                 text += f"\n\nTool result:\n{result['content']}"
@@ -50,10 +50,10 @@ def build_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 def matched_events(requirement: dict[str, Any], events: list[dict[str, Any]], paths: list[str],
                    signals: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Use BEG's operation/object signals; require explicit operation compatibility.
+    """Use EBG's operation/object signals; require explicit operation compatibility.
 
 Never promote a read of a test file to evidence that tests ran, or join two
-fully named files merely because BEG's basename aliases overlap.
+fully named files merely because EBG's basename aliases overlap.
 """
     text = "\n".join(ref["content"] for ref in requirement["refs"])
     demand = trace_signal(text)

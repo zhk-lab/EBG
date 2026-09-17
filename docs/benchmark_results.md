@@ -2,11 +2,11 @@
 
 更新日期：2026-09-14。
 
-以下评分表均为 **BEG / baseline**，每项较高值加粗，每组 100 题。
+以下评分表均为 **EBG / baseline**，每项较高值加粗，每组 100 题。
 
 SilentSwap 的原有七个模型为分阶段汇总：前两项使用最新第一阶段结果，`Code Correct` 沿用已选定的第二阶段结果，未重新串跑。
 
-GLM-5-3（low）的三个 benchmark 均已完整运行；SilentSwap 两阶段串跑，GLM 的 Code Correct 使用本次选定重评结果（BEG 0.700 / baseline 0.670），其余指标沿用已完成的正式结果。少量无效输出经校验错误反馈修正，两道第二阶段题目改用流式接收，模型和评分规则未变。
+GLM-5-3（low）的三个 benchmark 均已完整运行；SilentSwap 两阶段串跑，GLM 的 Code Correct 使用本次选定重评结果（EBG 0.700 / baseline 0.670），其余指标沿用已完成的正式结果。少量无效输出经校验错误反馈修正，两道第二阶段题目改用流式接收，模型和评分规则未变。
 
 ## SpecGap · GLM
 
@@ -60,7 +60,7 @@ GLM-5-3（low）的三个 benchmark 均已完整运行；SilentSwap 两阶段串
 | Sonnet 5 | **0.425** / 0.294 | **0.235** / 0.135 | **0.270** / 0.210 |
 | GLM-5-3 (low) | **0.708** / 0.560 | **0.590** / 0.375 | **0.720** / 0.685 |
 
-SilentSwap 的 Flash BEG 使用 V4.1，baseline 为旧 V4，属于跨版本比较。Luna 最新第一阶段有 1 题经额外校验错误反馈后重试补齐。
+SilentSwap 的 Flash EBG 使用 V4.1，baseline 为旧 V4，属于跨版本比较。Luna 最新第一阶段有 1 题经额外校验错误反馈后重试补齐。
 
 Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-14 的 `deepseek-flash` 重跑结果保留在 `.tmp/deepseek_flash_20260914_new_model/`，不作为当前正式结果。
 
@@ -92,25 +92,25 @@ Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-
 
 ## 数据来源
 
-- GLM-5-3：`experiments/<benchmark>/glm-5-3/`；SilentSwap 使用 `BEG/summary.json` 中的正式两阶段合并结果。
+- GLM-5-3：`experiments/<EBG 或 baseline>/<benchmark>/glm-5-3/`；SilentSwap 使用 EBG 目录中 `summary.json` 的正式两阶段合并结果。
 
-- SpecGap、FeedbackTrace 及各 benchmark 的 baseline：`experiments/<benchmark>/<model>/<BEG 或 baseline>/summary.json`。
-- SilentSwap 最新第一阶段（七个已有完整评分的模型）：`experiments/silentswap/<model>/BEG/stage1/`。2026-09-12已从回收站恢复逐题答案及两套Judge评分，正式目录与本表一致。
-- SilentSwap 分阶段合并评分：`experiments/silentswap/<model>/BEG/stage2/combined/<judge>/summary.json`，前两项已更新为恢复后的第一阶段，第二阶段没有重新串跑。
-- SilentSwap 第二阶段已选定分数：`experiments/silentswap/<model>/BEG/summary.json` 中的 `code_change_correct`。
+- SpecGap、FeedbackTrace 及各 benchmark 的 baseline：`experiments/baseline/<benchmark>/<model>/summary.json`。
+- SilentSwap 最新第一阶段（七个已有完整评分的模型）：`experiments/EBG/silentswap/<model>/stage1/`。2026-09-12已从回收站恢复逐题答案及两套Judge评分，正式目录与本表一致。
+- SilentSwap 分阶段合并评分：`experiments/EBG/silentswap/<model>/stage2/combined/<judge>/summary.json`，前两项已更新为恢复后的第一阶段，第二阶段没有重新串跑。
+- SilentSwap 第二阶段已选定分数：`experiments/EBG/silentswap/<model>/summary.json` 中的 `code_change_correct`。
 
 ## 预测 Token 用量（平均每个样本）
 
-以下直接比较 BEG 与 baseline 的平均总 token（输入＋输出），单位为 tokens/样本，按每组 100 题取平均，保留一位小数。
+以下直接比较 EBG 与 baseline 的平均总 token（输入＋输出），单位为 tokens/样本，按每组 100 题取平均，保留一位小数。
 
 - 只统计最终成功预测轨迹中的有效模型调用；失败的整题尝试、被拒绝的格式纠错调用及失败的接口调用不计入，不包含 judge 用量或历史实验重跑。
 - 输入 token 包含各轮实际发送的上下文和缓存命中部分，不是对文件内容去重后的长度；输出 token 使用模型接口上报的用量。
-- SilentSwap 的 BEG 为最新第一阶段与已有第二阶段用量相加，与上方分阶段分数采用相同批次；它不是重新串跑两阶段后的实测总量。
+- SilentSwap 的 EBG 为最新第一阶段与已有第二阶段用量相加，与上方分阶段分数采用相同批次；它不是重新串跑两阶段后的实测总量。
 - Token 越少表示用量越低，以下用量表不按评分表的规则加粗。
 
 ### SpecGap
 
-| 模型 | BEG | baseline |
+| 模型 | EBG | baseline |
 |---|---:|---:|
 | Luna | 56,251.5 | 44,167.6 |
 | Flash | 104,354.0 | 89,655.5 |
@@ -122,7 +122,7 @@ Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-
 
 ### SilentSwap
 
-| 模型 | BEG | baseline |
+| 模型 | EBG | baseline |
 |---|---:|---:|
 | Luna | 78,391.2 | 60,200.6 |
 | Flash | 111,747.7 | 91,772.6 |
@@ -134,7 +134,7 @@ Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-
 
 ### FeedbackTrace
 
-| 模型 | BEG | baseline |
+| 模型 | EBG | baseline |
 |---|---:|---:|
 | Luna | 65,606.7 | 67,664.8 |
 | Flash | 68,387.6 | 70,707.9 |

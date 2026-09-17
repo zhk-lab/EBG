@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "beg"
+name = "ebg"
 version = "0.1.0"
-description = "Deterministic Behavioral Evidence Graph construction"
+description = "Deterministic Evidence-Grounded Behavior Graph construction"
 requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.20", "tiktoken>=0.7", "python-dotenv>=1.0"]
 
@@ -15,8 +15,8 @@ test = ["jsonschema>=4.20"]
 [tool.setuptools.packages.find]
 where = ["src", "."]
 include = [
-  "beg",
-  "beg.*",
+  "ebg",
+  "ebg.*",
   "evaluation_core",
   "evaluation_core.*",
   "agentloop",

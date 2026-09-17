@@ -279,7 +279,7 @@ class BatchPredictionTests(unittest.TestCase):
             })
             self.assertEqual(
                 manifest["prompt_variants"],
-                {"raw": "baseline", "graph": "BEG"},
+                {"raw": "baseline", "graph": "EBG"},
             )
             self.assertEqual(
                 manifest["prediction_requests"]["specgap"],
@@ -420,7 +420,7 @@ class PrepareOnlyTests(unittest.TestCase):
         args = SimpleNamespace(
             base_url="http://127.0.0.1:28080/v1",
             model="gpt-5-6-luna",
-            api_key_env="BEG_TEST_MISSING_KEY",
+            api_key_env="EBG_TEST_MISSING_KEY",
             timeout=30.0,
             request_options={"reasoning_effort": "none"},
         )
@@ -445,7 +445,7 @@ class PrepareOnlyTests(unittest.TestCase):
         args = SimpleNamespace(
             base_url="https://example.com/v1",
             model="gpt-5-6-luna",
-            api_key_env="BEG_TEST_MISSING_KEY",
+            api_key_env="EBG_TEST_MISSING_KEY",
             timeout=30.0,
         )
 
@@ -712,7 +712,7 @@ class PrepareOnlyTests(unittest.TestCase):
             artifact_root=artifact_root,
             output=run_root,
             schema_root=PROJECT_ROOT / "schemas",
-            api_key_env="BEG_TEST_MISSING_KEY",
+            api_key_env="EBG_TEST_MISSING_KEY",
             prepare_only=True,
             base_url=None,
             model=None,

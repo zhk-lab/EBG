@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG Build Manifest",
+  "title": "EBG Build Manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "method", "input_id", "benchmark", "counts", "outputs"],
   "properties": {
     "schema_version": {"const": 3},
-    "method": {"const": "BEG"},
+    "method": {"const": "EBG"},
     "input_id": {"type": "string", "minLength": 1},
     "benchmark": {"enum": ["specgap", "silentswap", "feedbacktrace"]},
     "counts": {

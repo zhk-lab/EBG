@@ -53,7 +53,7 @@ def resolve_model_settings(args: argparse.Namespace, *, judge: bool = False) -> 
     Missing request options stay absent; no model-name-based defaults are applied.
     """
     load_dotenv(getattr(args, "env_file", PROJECT_ROOT / ".env"), override=False)
-    role = "JUDGE" if judge else "BEG"
+    role = "JUDGE" if judge else "EBG"
     profile = (
         getattr(args, "model_profile", None)
         or os.environ.get(f"{role}_MODEL_PROFILE", "")
@@ -77,7 +77,7 @@ def resolve_model_settings(args: argparse.Namespace, *, judge: bool = False) -> 
         or setting("MODEL_NAME") or ""
     )
     base_url = setting("BASE_URL", "base_url") or (
-        os.environ.get("BEG_API_BASE_URL", "") if not judge else ""
+        os.environ.get("EBG_API_BASE_URL", "") if not judge else ""
     )
     key_name = setting("API_KEY_ENV", "api_key_env")
     if not key_name:

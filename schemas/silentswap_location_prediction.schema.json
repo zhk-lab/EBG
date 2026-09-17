@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG SilentSwap Stage One Locations",
+  "title": "EBG SilentSwap Stage One Locations",
   "type": "object",
   "additionalProperties": false,
   "required": [

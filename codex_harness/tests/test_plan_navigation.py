@@ -16,7 +16,7 @@ class PlanNavigationTests(unittest.TestCase):
         self.repo.mkdir()
         self.code = self.repo / 'app.py'
         self.code.write_text('def run():\n    return 1\n', encoding='utf-8')
-        self.plan = self.repo / 'BEG.md'
+        self.plan = self.repo / 'EBG.md'
         self.demand = 'app.py::run must return 2.'
         self.plan.write_text(self.demand, encoding='utf-8')
         self.harness = Harness(self.root / 'state')
@@ -30,7 +30,7 @@ class PlanNavigationTests(unittest.TestCase):
         target.write_text(code, encoding='utf-8', newline='')
         quote = '保留输入原文和位置。'
         self.plan.write_text('# Design\n## Evidence Intake\n' + quote + '\n## Other\nElsewhere.', encoding='utf-8')
-        selected = checkpoint_task(self.harness, repo=self.repo, prompt='Inspect BEG.md.')
+        selected = checkpoint_task(self.harness, repo=self.repo, prompt='Inspect EBG.md.')
         plan_id = next(s['id'] for s in selected['sources'] if s['kind'] == 'plan')
         task = selected['task_id']
         payload = yaml.safe_load(self.harness.build_evidence_groups(task, [
@@ -49,12 +49,12 @@ class PlanNavigationTests(unittest.TestCase):
         self.assertEqual(excerpt['content'], code.split('\ndef unrelated')[0])
         self.assertNotIn('other', excerpt['content'])
         index = read(payload['repository']['read_ref'])['content']
-        self.assertEqual({e['path'] for e in index}, {'BEG.md', 'app.py', 'evidence_intake.py'})
+        self.assertEqual({e['path'] for e in index}, {'EBG.md', 'app.py', 'evidence_intake.py'})
 
     def test_unrelated_section_does_not_supply_navigation(self):
         quote = '保留现有行为。'
         self.plan.write_text('## App Module\napp.py\n## Other\n' + quote, encoding='utf-8')
-        selected = checkpoint_task(self.harness, repo=self.repo, prompt='Inspect BEG.md.')
+        selected = checkpoint_task(self.harness, repo=self.repo, prompt='Inspect EBG.md.')
         plan_id = next(s['id'] for s in selected['sources'] if s['kind'] == 'plan')
         task = selected['task_id']
         result = yaml.safe_load(self.harness.build_evidence_groups(task, [

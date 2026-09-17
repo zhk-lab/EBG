@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG SpecGap Prediction",
+  "title": "EBG SpecGap Prediction",
   "type": "object",
   "additionalProperties": false,
   "required": ["input_id", "benchmark", "findings"],

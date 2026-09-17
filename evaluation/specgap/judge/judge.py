@@ -1,7 +1,7 @@
-"""Official-compatible SpecGap Judge for saved BEG predictions.
+"""Official-compatible SpecGap Judge for saved EBG predictions.
 
 The transport remains outside this module.  The Judge input is reconstructed
-from the frozen BEG sample identity and the original SpecGAP reference files so
+from the frozen EBG sample identity and the original SpecGAP reference files so
 the model receives the same semantic payload as the desktop benchmark.
 """
 
@@ -74,7 +74,7 @@ def normalize_repo_path(value: str) -> str:
 
 
 def candidate_findings(prediction: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Normalize BEG and legacy predictions to the official finding shape."""
+    """Normalize EBG and legacy predictions to the official finding shape."""
 
     native = prediction.get("findings")
     if isinstance(native, list):

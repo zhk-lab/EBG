@@ -52,8 +52,8 @@ class HarnessMatchingTests(unittest.TestCase):
         signal = trace_signal("运行 tests/test_retry.py，确认重试次数。")
         self.assertIn("verify", signal["operations"])
 
-    def test_adapter_does_not_change_beg_tool_classification(self):
-        from codex_harness.beg.behavior_atomization import _trace_tool_operation
+    def test_adapter_does_not_change_ebg_tool_classification(self):
+        from codex_harness.ebg.behavior_atomization import _trace_tool_operation
 
         item = {"content": "*** Update File: app.py", "locator": {"event_type": "tool_exchange", "tool_name": "apply_patch"}}
         before = _trace_tool_operation(item)

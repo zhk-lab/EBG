@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG Evidence",
+  "title": "EBG Evidence",
   "type": "object",
   "additionalProperties": false,
   "required": ["evidence_id", "source_type", "locator", "content"],

@@ -1,4 +1,4 @@
-"""Apply the frozen formal SilentSwap Judge rubric to a BEG prediction."""
+"""Apply the frozen formal SilentSwap Judge rubric to a EBG prediction."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _candidate_target(swap: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Use the formal target while retaining old BEG prediction compatibility."""
+    """Use the formal target while retaining old EBG prediction compatibility."""
 
     target = swap.get("target")
     if isinstance(target, Mapping):

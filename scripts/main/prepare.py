@@ -24,18 +24,18 @@ from agentloop.context import FastTokenCounter
 from agentloop.evidence import render_tool_result
 from agentloop.graph_backend import GraphBackend
 from agentloop.raw_backend import RawBackend
-from beg.behavior_atomization import build_behaviors, validate_behaviors
-from beg.behavior_directory import (
+from ebg.behavior_atomization import build_behaviors, validate_behaviors
+from ebg.behavior_directory import (
     DIRECTORY_ENCODING,
     build_ranked_directory,
     render_ranked_directory,
     validate_ranked_directory,
 )
-from beg.core.errors import DirectoryError, GraphError
-from beg.evidence_intake import build_evidence, load_visible_bundle, validate_evidence
-from beg.graph_assembly import build_graph, validate_graph
-from beg.local_graph_retrieval import LocalGraphRetriever
-from beg.relation_linking import build_edges, validate_edges
+from ebg.core.errors import DirectoryError, GraphError
+from ebg.evidence_intake import build_evidence, load_visible_bundle, validate_evidence
+from ebg.graph_assembly import build_graph, validate_graph
+from ebg.local_graph_retrieval import LocalGraphRetriever
+from ebg.relation_linking import build_edges, validate_edges
 from jsonschema import Draft202012Validator
 
 
@@ -157,7 +157,7 @@ def build_graph_artifacts(
     }
     manifest = {
         "schema_version": _schema_version(bundle.benchmark),
-        "method": "BEG",
+        "method": "EBG",
         "input_id": bundle.input_id,
         "benchmark": bundle.benchmark,
         "counts": counts,
@@ -260,7 +260,7 @@ def validate_output(
     ]
     expected_manifest = {
         "schema_version": _schema_version(bundle.benchmark),
-        "method": "BEG",
+        "method": "EBG",
         "input_id": bundle.input_id,
         "benchmark": bundle.benchmark,
         "counts": expected_counts,

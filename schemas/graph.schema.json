@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG Static Graph",
+  "title": "EBG Static Graph",
   "oneOf": [
     {"$ref": "#/$defs/repo_graph"},
     {"$ref": "#/$defs/trace_graph"}

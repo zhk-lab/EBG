@@ -44,7 +44,7 @@ class Harness:
                               *, read_ref: str | None = None, offset: int = 0) -> str:
         task = self.store.task(task_id)
         if task['scope'].get('mode') != 'checkpoint':
-            raise HarnessError('Evidence requires a checkpoint; create one with beg_review.')
+            raise HarnessError('Evidence requires a checkpoint; create one with ebg_review.')
         self.sessions.current(task['scope']['session_id'])
         owner = f"evidence:{task_id}"
         if read_ref:
@@ -81,7 +81,7 @@ class Harness:
         if notes:
             prompt += '\n采集限制：' + '；'.join(notes)
         payload = {
-            'beg_disclose_prompt': prompt,
+            'ebg_disclose_prompt': prompt,
             'requirements': {r['id']: r['check'] for r in view['requirements']},
             'evidence_groups': {r['id']: self.group(view, r) for r in view['requirements']},
             'repository': {
@@ -152,7 +152,7 @@ class Harness:
         self.sessions.current(scope['session_id'])
         root = Path(task['repo_path'])
         if scope.get('mode') != 'checkpoint':
-            raise HarnessError('Evidence requires a checkpoint; create one with beg_review.')
+            raise HarnessError('Evidence requires a checkpoint; create one with ebg_review.')
         files = task['current_files']
         selected_ids = set(scope['event_ids'])
         events = [e for e in self.sessions.events(scope['session_id']) if e['id'] in selected_ids]

@@ -33,14 +33,14 @@ class PromptAssetTests(unittest.TestCase):
     def test_repo_pair_shares_proof_rules_and_output_contract(self) -> None:
         for benchmark in ("specgap", "silentswap"):
             raw = load_task_prompt("baseline", benchmark)
-            graph = load_task_prompt("BEG", benchmark)
+            graph = load_task_prompt("EBG", benchmark)
             marker = "For each candidate"
             raw_rules = raw.split(marker, 1)[1].replace("`R0001`", "`F0001`")
             graph_rules = graph.split(marker, 1)[1].replace(
                 "directory rows, search hits, Behavior labels, or edges", "directory rows or search hits"
             )
             if benchmark == "specgap":
-                # BEG now has a count prior; evidence rules and answer fields stay shared.
+                # EBG now has a count prior; evidence rules and answer fields stay shared.
                 self.assertEqual(
                     raw_rules.split("\n\nReject", 1)[0],
                     graph_rules.split("\n\nReject", 1)[0],
@@ -90,7 +90,7 @@ class PromptAssetTests(unittest.TestCase):
         self.assertNotIn("Context compression", prompt)
 
     def test_all_six_allowlisted_prompts_are_non_empty(self) -> None:
-        for variant in ("BEG", "baseline"):
+        for variant in ("EBG", "baseline"):
             for benchmark in ("specgap", "silentswap", "feedbacktrace"):
                 with self.subTest(variant=variant, benchmark=benchmark):
                     prompt = load_task_prompt(variant, benchmark)
@@ -102,7 +102,7 @@ class PromptAssetTests(unittest.TestCase):
             "the evidence is sufficient, return finish. Check the JSON action format "
             "carefully."
         )
-        for variant in ("BEG", "baseline"):
+        for variant in ("EBG", "baseline"):
             for benchmark in ("specgap", "silentswap"):
                 with self.subTest(variant=variant, benchmark=benchmark):
                     prompt = " ".join(load_task_prompt(variant, benchmark).split())
@@ -120,7 +120,7 @@ class PromptAssetTests(unittest.TestCase):
         )
         prompts = {
             variant: load_task_prompt(variant, "feedbacktrace")
-            for variant in ("baseline", "BEG")
+            for variant in ("baseline", "EBG")
         }
 
         def sections(prompt: str) -> dict[str, str]:
@@ -136,7 +136,7 @@ class PromptAssetTests(unittest.TestCase):
             }
 
         baseline = sections(prompts["baseline"])
-        graph = sections(prompts["BEG"])
+        graph = sections(prompts["EBG"])
         for heading in headings:
             if heading in {"INPUT FORMAT", "HOW TO READ THE INPUT"}:
                 self.assertNotEqual(baseline[heading], graph[heading])
@@ -155,7 +155,7 @@ class PromptAssetTests(unittest.TestCase):
             self.assertNotIn("network retries", prompt.lower())
             self.assertNotIn("context window", prompt.lower())
 
-        beg_prompt = prompts["BEG"]
+        ebg_prompt = prompts["EBG"]
         for term in (
             "`task_scopes`",
             "`current_task_id`",
@@ -170,14 +170,14 @@ class PromptAssetTests(unittest.TestCase):
             "`supersedes`",
             "`content`",
         ):
-            self.assertIn(term, beg_prompt)
+            self.assertIn(term, ebg_prompt)
         for obsolete in ("`root`", "`steps`", "`cross_links`", "`precedes`", "`continues`"):
-            self.assertNotIn(obsolete, beg_prompt)
+            self.assertNotIn(obsolete, ebg_prompt)
 
-    def test_beg_prompts_contain_their_model_visible_contracts(self) -> None:
+    def test_ebg_prompts_contain_their_model_visible_contracts(self) -> None:
         for benchmark in ("specgap", "silentswap", "feedbacktrace"):
             with self.subTest(benchmark=benchmark):
-                prompt = load_task_prompt("BEG", benchmark)
+                prompt = load_task_prompt("EBG", benchmark)
                 schema = model_prediction_schema(
                     load_prediction_schema(PROJECT_ROOT / "schemas",
                         "silentswap_location_prediction.schema.json" if benchmark == "silentswap" else benchmark)
@@ -187,25 +187,25 @@ class PromptAssetTests(unittest.TestCase):
                 for value in _enum_strings(schema):
                     self.assertIn(value, prompt)
 
-    def test_beg_repo_prompts_leave_action_protocol_to_system(self) -> None:
+    def test_ebg_repo_prompts_leave_action_protocol_to_system(self) -> None:
         for benchmark in ("specgap", "silentswap"):
             with self.subTest(benchmark=benchmark):
-                prompt = load_task_prompt("BEG", benchmark)
+                prompt = load_task_prompt("EBG", benchmark)
                 self.assertNotIn("ACTION PROTOCOL", prompt)
                 self.assertNotIn('{"action":"search"', prompt)
                 self.assertNotIn('{"action":"read"', prompt)
                 self.assertIn("finish.prediction", prompt)
 
-    def test_beg_repo_prompt_output_examples_are_valid_json(self) -> None:
+    def test_ebg_repo_prompt_output_examples_are_valid_json(self) -> None:
         for benchmark in ("specgap", "silentswap"):
             with self.subTest(benchmark=benchmark):
-                prompt = load_task_prompt("BEG", benchmark)
+                prompt = load_task_prompt("EBG", benchmark)
                 blocks = re.findall(r"```json\s*(.*?)\s*```", prompt, re.DOTALL)
                 self.assertEqual(len(blocks), 1)
                 self.assertIsInstance(json.loads(blocks[0]), dict)
 
-    def test_beg_specgap_prompt_prioritizes_and_completes_source_review(self) -> None:
-        prompt = load_task_prompt("BEG", "specgap")
+    def test_ebg_specgap_prompt_prioritizes_and_completes_source_review(self) -> None:
+        prompt = load_task_prompt("EBG", "specgap")
         normalized = " ".join(prompt.split())
 
         self.assertIn("SpecGap recovery", normalized)
@@ -241,8 +241,8 @@ class PromptAssetTests(unittest.TestCase):
         self.assertNotIn("CODE IDENTIFIED FROM DOCUMENT", normalized)
         self.assertNotIn("ONE-HOP CONNECTED CODE", normalized)
 
-    def test_beg_silentswap_prompt_requires_unique_grounded_slots(self) -> None:
-        prompt = load_task_prompt("BEG", "silentswap")
+    def test_ebg_silentswap_prompt_requires_unique_grounded_slots(self) -> None:
+        prompt = load_task_prompt("EBG", "silentswap")
         normalized = " ".join(prompt.split())
 
         self.assertIn("SilentSwap recovery", normalized)
@@ -300,8 +300,8 @@ class PromptAssetTests(unittest.TestCase):
 
     def test_prompt_selection_rejects_unknown_or_path_like_values(self) -> None:
         invalid = (
-            ("beg", "specgap"),
-            ("BEG", "../specgap"),
+            ("ebg", "specgap"),
+            ("EBG", "../specgap"),
             ("baseline", "unknown"),
             ("../baseline", "feedbacktrace"),
         )
@@ -423,7 +423,7 @@ class PromptAssetTests(unittest.TestCase):
                     PROJECT_ROOT / "schemas",
                     **common,
                     initial_index="F0001 | pkg/api.py",
-                    prompt_variant="BEG",
+                    prompt_variant="EBG",
                 )
                 self.assertIn("INPUT AND SOURCE FORMAT", raw.initial_user_prompt)
                 self.assertIn("Each R Read ID", raw.initial_user_prompt)
@@ -436,11 +436,11 @@ class PromptAssetTests(unittest.TestCase):
                     self.assertIn("Output only target for each swap", graph.initial_user_prompt)
                 self.assertNotIn("Local Graph JSON", graph.initial_user_prompt)
 
-    def test_beg_repo_request_explains_all_runtime_blocks(self) -> None:
+    def test_ebg_repo_request_explains_all_runtime_blocks(self) -> None:
         prompt = build_repo_initial_user_prompt(
             input_id="sg_prompt",
             benchmark="specgap",
-            task_prompt=load_task_prompt("BEG", "specgap"),
+            task_prompt=load_task_prompt("EBG", "specgap"),
             task_document="complete document",
             initial_index="[REPOSITORY SOURCE UNITS]\nR0001  pkg/api.py",
         )
@@ -454,10 +454,10 @@ class PromptAssetTests(unittest.TestCase):
         self.assertNotIn("[[OUTPUT SCHEMA]]", prompt)
         self.assertIn('"code_evidence"', prompt)
 
-    def test_beg_trace_request_contains_semantic_task_and_complete_view(self) -> None:
+    def test_ebg_trace_request_contains_semantic_task_and_complete_view(self) -> None:
         messages = build_trace_review_messages(
             input_id="ft_prompt_long",
-            task_prompt=load_task_prompt("BEG", "feedbacktrace"),
+            task_prompt=load_task_prompt("EBG", "feedbacktrace"),
             trace_view=(
                 '{"input_id":"ft_prompt_long","benchmark":"feedbacktrace",'
                 '"current_task_id":"K0001","task_scopes":['

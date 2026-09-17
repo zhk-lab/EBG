@@ -1,4 +1,4 @@
-"""BEG evidence collection and read-only disclosure tools for Codex."""
+"""EBG evidence collection and read-only disclosure tools for Codex."""
 
 from .application.service import Harness
 

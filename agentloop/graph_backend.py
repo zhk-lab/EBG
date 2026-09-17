@@ -8,9 +8,9 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Callable
 
-from beg.behavior_directory import document_section_bodies, render_ranked_directory
-from beg.core.model import VisibleBundle
-from beg.local_graph_retrieval import LocalGraphRetriever, RetrievalError
+from ebg.behavior_directory import document_section_bodies, render_ranked_directory
+from ebg.core.model import VisibleBundle
+from ebg.local_graph_retrieval import LocalGraphRetriever, RetrievalError
 from evaluation_core.contracts import EvidenceSpan
 
 from .backend import TokenCounter, content_identity, pack_read_result

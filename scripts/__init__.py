@@ -1,1 +1,1 @@
-"""BEG build and validation runners."""
+"""EBG build and validation runners."""

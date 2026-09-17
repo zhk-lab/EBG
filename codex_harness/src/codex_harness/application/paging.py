@@ -150,8 +150,8 @@ class OutputPages:
             raise HarnessError("offset is outside the evidence directory.")
         result = {
             "read_ref": ref,
-            "beg_disclose_prompt": "核对原文后披露；未展开不等于未匹配。按引用继续调用本工具。",
-            "instructions_ref": child_ref(ref, "beg_disclose_prompt"),
+            "ebg_disclose_prompt": "核对原文后披露；未展开不等于未匹配。按引用继续调用本工具。",
+            "instructions_ref": child_ref(ref, "ebg_disclose_prompt"),
             checklist: {"read_ref": child_ref(ref, checklist)},
             "evidence_groups": {}, "total_groups": len(groups),
         }

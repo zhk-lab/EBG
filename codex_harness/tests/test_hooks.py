@@ -92,7 +92,7 @@ class HookTests(unittest.TestCase):
         self.harness = Harness(self.root / 'state')
         self.hook('PostToolUse', **call, tool_response='Updated')
         self.assertEqual(len(self.harness.sessions.events('s')), 3)
-        self.hook('PostToolUse', **{**call, 'tool_name': 'mcp__beg_disclose__beg_evidence'}, tool_response='Evidence')
+        self.hook('PostToolUse', **{**call, 'tool_name': 'mcp__ebg_disclose__ebg_evidence'}, tool_response='Evidence')
         self.assertEqual(len(self.harness.sessions.events('s')), 3)
 
     def test_sessions_and_reused_call_ids_stay_separate(self):

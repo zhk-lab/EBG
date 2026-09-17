@@ -1,4 +1,4 @@
-"""Run single-sample or batch baseline/BEG predictions."""
+"""Run single-sample or batch baseline/EBG predictions."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from agentloop import (
 )
 from agentloop.benchmark_configs import repo_benchmark_config
 from agentloop.errors import AgentLoopError
-from beg.behavior_directory import DIRECTORY_ENCODING
-from beg.evidence_intake import load_visible_bundle
+from ebg.behavior_directory import DIRECTORY_ENCODING
+from ebg.evidence_intake import load_visible_bundle
 from evaluation_core.contracts import load_prediction_schema
 from evaluation_core.messages import (
     build_baseline_messages,
@@ -74,10 +74,10 @@ def _run(
             messages = build_trace_review_messages(
                 input_id=view.input_id,
                 task_prompt=(task_prompt if task_prompt is not None
-                             else load_task_prompt("BEG", "feedbacktrace")),
+                             else load_task_prompt("EBG", "feedbacktrace")),
                 trace_view=view.text,
             )
-            prompt_variant = "BEG"
+            prompt_variant = "EBG"
         else:
             payload = _load_raw_trace_payload(artifact_root, args.input_id)
             view = render_raw_trace_payload(payload)
@@ -144,7 +144,7 @@ def _run(
         loop_config = replace(loop_config, tool_result_budget=tool_result_budget)
     benchmark_config.validate_for(bundle.benchmark)
     count_directory_tokens = token_counter(DIRECTORY_ENCODING)
-    prompt_variant = "baseline" if args.arm == "raw" else "BEG"
+    prompt_variant = "baseline" if args.arm == "raw" else "EBG"
     if args.arm == "raw":
         backend = RawBackend(
             bundle,
@@ -232,14 +232,14 @@ def _run(
 
 
 def _client(args: argparse.Namespace) -> OpenAICompatibleJsonClient:
-    base_url = args.base_url or os.environ.get("BEG_API_BASE_URL", "")
-    model = args.model or os.environ.get("BEG_MODEL", "")
+    base_url = args.base_url or os.environ.get("EBG_API_BASE_URL", "")
+    model = args.model or os.environ.get("EBG_MODEL", "")
     api_key = os.environ.get(args.api_key_env, "")
     if not api_key and urlsplit(base_url).hostname == "127.0.0.1":
         api_key = "unused-placeholder"
     if not base_url or not model or not api_key:
         raise AgentLoopError(
-            "set --base-url/BEG_API_BASE_URL, --model/BEG_MODEL, and "
+            "set --base-url/EBG_API_BASE_URL, --model/EBG_MODEL, and "
             f"the {args.api_key_env} environment variable"
         )
     return OpenAICompatibleJsonClient(
@@ -317,7 +317,7 @@ class BatchConfig:
     model: str
     base_url: str
     workers: int = 2
-    api_key_env: str = "BEG_API_KEY"
+    api_key_env: str = "EBG_API_KEY"
     timeout: float = 600.0
     prepare_only: bool = False
     schema_root: Path = PROJECT_ROOT / "schemas"
@@ -654,7 +654,7 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
             for benchmark in config.benchmarks
         },
         "artifact_root": str(config.artifact_root.resolve()),
-        "prompt_variants": {"raw": "baseline", "graph": "BEG"},
+        "prompt_variants": {"raw": "baseline", "graph": "EBG"},
         "api_key_env": config.api_key_env,
         "timeout": config.timeout,
         "workers": config.workers,

@@ -24,7 +24,7 @@ from agentloop.errors import (
     ProviderContextError,
     RetryableModelError,
 )
-from beg.core.model import RepoArtifact, TaskDocument, VisibleBundle
+from ebg.core.model import RepoArtifact, TaskDocument, VisibleBundle
 from tests.support import ProjectTemporaryDirectory
 
 

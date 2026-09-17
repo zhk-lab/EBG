@@ -2,30 +2,30 @@
 
 本文翻译当前四个 `SKILL.md`，供审阅，不替换运行中的英文文件。工具名、参数名及状态值保留原文；引用的共享规则和工具流程文件不在本次翻译范围内。
 
-## 1. beg-review：总入口
+## 1. ebg-review：总入口
 
-**描述：** 执行研究 Plan，或在 BEG 检查点审查实验调整与结果时，协调 BEG autoresearch 审查流程。
+**描述：** 执行研究 Plan，或在 EBG 检查点审查实验调整与结果时，协调 EBG autoresearch 审查流程。
 
 ### Autoresearch 审查流程
 
 Autoresearch 围绕假设、代码、实验、基线比较以及保留／回退决定不断迭代。审查应关注实验有效性、公平比较和有依据的归因，而不只是代码能否运行。
 
-- 仅执行 Plan 时需要 ambiguity 审查：读取 Plan 后、执行前完成。Plan 已在上下文中时可直接审查。如果 hook 未识别执行意图，调用 `beg_review(trigger="ambiguity", focus=具体计划)`。
-- 执行过程中保留调整和失败的证据；普通失败不要求立即审查。重要调整用 `beg_record(note_kind="adjustment", decision_status="proposed" 或 "executed", summary=原因及影响)` 记录；关键歧义使用 `note_kind="ambiguity"`，结果限制使用 `note_kind="limitation"`。不要传入 `check_id`／`conclusion`：这只是尚未审查的记录，不是授权或审查结论。
+- 仅执行 Plan 时需要 ambiguity 审查：读取 Plan 后、执行前完成。Plan 已在上下文中时可直接审查。如果 hook 未识别执行意图，调用 `ebg_review(trigger="ambiguity", focus=具体计划)`。
+- 执行过程中保留调整和失败的证据；普通失败不要求立即审查。重要调整用 `ebg_record(note_kind="adjustment", decision_status="proposed" 或 "executed", summary=原因及影响)` 记录；关键歧义使用 `note_kind="ambiguity"`，结果限制使用 `note_kind="limitation"`。不要传入 `check_id`／`conclusion`：这只是尚未审查的记录，不是授权或审查结论。
 - Stop 时独立选择阶段：执行过 Plan、session 调用次数／耗时达到阈值，或记录了结果限制，触发 result；工具失败、记录了关键歧义或重要调整，触发 adjustment。仅有一次结论为 clear 的 ambiguity 检查，不触发 adjustment。只审查适用阶段；两类都适用时，先 adjustment、后 result。等待用户澄清的状态优先。已完成且内容未变的检查可复用。
-- `beg_review` 返回对应阶段的清单和共享规则。只加载该阶段：[beg-ambiguity](src/codex_harness/skills/beg-ambiguity/SKILL.md)、[beg-adjustment](src/codex_harness/skills/beg-adjustment/SKILL.md) 或 [beg-result-review](src/codex_harness/skills/beg-result-review/SKILL.md)。
-- 每项判断都必须调用 `beg_evidence`，提出具体问题。遵循[共享规则](src/codex_harness/skills/beg-review/references/review-rules.md)；需要展开材料时，参照[工具流程](src/codex_harness/skills/beg-review/references/tool-workflows.md)。
-- 对已有授权未覆盖、需要用户决定的重要取舍：只收集必要证据，调用 `beg_record(waiting_for_user=true, conclusion="uncertain", summary=问题及影响)`，随后立即在最终回复中提问并等待。Stop 必须允许该问题正常发出。用户的真实答复解决取舍后，在原等待检查点记录 `resolution`。收到新消息本身不代表问题已解决。
+- `ebg_review` 返回对应阶段的清单和共享规则。只加载该阶段：[ebg-ambiguity](src/codex_harness/skills/ebg-ambiguity/SKILL.md)、[ebg-adjustment](src/codex_harness/skills/ebg-adjustment/SKILL.md) 或 [ebg-result-review](src/codex_harness/skills/ebg-result-review/SKILL.md)。
+- 每项判断都必须调用 `ebg_evidence`，提出具体问题。遵循[共享规则](src/codex_harness/skills/ebg-review/references/review-rules.md)；需要展开材料时，参照[工具流程](src/codex_harness/skills/ebg-review/references/tool-workflows.md)。
+- 对已有授权未覆盖、需要用户决定的重要取舍：只收集必要证据，调用 `ebg_record(waiting_for_user=true, conclusion="uncertain", summary=问题及影响)`，随后立即在最终回复中提问并等待。Stop 必须允许该问题正常发出。用户的真实答复解决取舍后，在原等待检查点记录 `resolution`。收到新消息本身不代表问题已解决。
 
 按照实验协议核对数据隔离、评测可比性、允许改变的变量、资源／搜索预算及证据来源。受测试数据污染的结果不能支持独立泛化结论；不同评测集上的分数不能证明算法改进。
 
-## 2. beg-ambiguity：执行前澄清
+## 2. ebg-ambiguity：执行前澄清
 
-**描述：** 在执行 Plan 前的 BEG ambiguity 检查点，澄清 autoresearch 目标和实验协议。
+**描述：** 在执行 Plan 前的 EBG ambiguity 检查点，澄清 autoresearch 目标和实验协议。
 
 ### Autoresearch 审查
 
-执行 Plan 前，使用 `beg_evidence` 核实目标、Plan 和相关实现前提。“不存在歧义”也是有效结论。
+执行 Plan 前，使用 `ebg_evidence` 核实目标、Plan 和相关实现前提。“不存在歧义”也是有效结论。
 
 1. **决策规则：** 从已获授权的目标中提炼可执行的选择规则，包括主要目标、取舍、最低要求和保留／回退标准。计算了多个指标，不代表已确定其优先级。如果不同的合理优先级会选出不同赢家，而任务没有明确规定，这就是会影响决策的歧义：选择或实施获胜方案前应先询问。不能仅因 Plan 写着“最佳”，就根据惯例自行设定目标或平局处理规则。
 2. 训练、验证和独立测试分别使用哪些数据版本与划分？是否只允许在验证集上调参？如果这些前提取决于代码，应检查数据加载和预处理实现。
@@ -38,9 +38,9 @@ Autoresearch 围绕假设、代码、实验、基线比较以及保留／回退�
 
 ### 取证流程
 
-调用 `beg_review(trigger="ambiguity")`，必须执行 `beg_evidence`，然后调用 `beg_record`。遵循[共享规则](src/codex_harness/skills/beg-review/references/review-rules.md)。
+调用 `ebg_review(trigger="ambiguity")`，必须执行 `ebg_evidence`，然后调用 `ebg_record`。遵循[共享规则](src/codex_harness/skills/ebg-review/references/review-rules.md)。
 
-## 3. beg-adjustment：执行调整复核
+## 3. ebg-adjustment：执行调整复核
 
 **描述：** 执行结束、结果审查之前，复核 autoresearch 的执行变化及保留／回退理由。
 
@@ -56,21 +56,21 @@ Autoresearch 通过实验决定是否保留提出的改进。故障恢复可以�
 4. **检验归因。** 即使没有提出的算法改进，仅改变执行过程，是否也可能改变测量结果？如果存在这种可能，应将这一额外影响与预期改进分开。可以在两种执行过程下用同一方法做小规模比较，在采用的新条件下重跑基线，或进行适当的重复试验；选择能够针对已识别机制的对照。不要要求随机实验逐比特一致。有适当证据时，保持分布不变的调整可以接受；但一次有利运行，或笼统提醒“结果存在波动”，不能解决具体的执行过程差异。
 5. **选择有证据支持的处理方式。** 如果相关条件得到保留，说明证据并继续。如果条件改变，应先恢复可比条件，或在授权范围内完成必要对照，再用结果支持采纳决定。如果无法做到，应明确哪项归因或决定仍缺乏支持，并缩小结论范围或暂缓决定。区分预期研究变化与附带变化；即使是预期变化，也需要合适的对照。缺少证据意味着不确定，而不是等价；仅有执行过程差异，也不能证明候选无效。
 
-在 `beg_record` 中简洁记录这条判断链：**调整 → 实际差异或已证实的条件保留 → 对比较的影响 → 处理方式及剩余限制**。只有相关等价性得到支持，或重要影响已处理并验证，才能标记为 `clear`。尚未解决的具体有效性问题记为 `issue`，证据不足记为 `uncertain`。对于修复或回退，应核实最终实现和状态，并说明研究目标是否达成。遵循现有授权和澄清规则；本审查不要求为已授权的常规修复或对照另行请求许可。
+在 `ebg_record` 中简洁记录这条判断链：**调整 → 实际差异或已证实的条件保留 → 对比较的影响 → 处理方式及剩余限制**。只有相关等价性得到支持，或重要影响已处理并验证，才能标记为 `clear`。尚未解决的具体有效性问题记为 `issue`，证据不足记为 `uncertain`。对于修复或回退，应核实最终实现和状态，并说明研究目标是否达成。遵循现有授权和澄清规则；本审查不要求为已授权的常规修复或对照另行请求许可。
 
 ### 取证流程
 
-调用 `beg_review(trigger="adjustment")`，必须执行 `beg_evidence`，然后调用 `beg_record`。遵循[共享规则](src/codex_harness/skills/beg-review/references/review-rules.md)。
+调用 `ebg_review(trigger="adjustment")`，必须执行 `ebg_evidence`，然后调用 `ebg_record`。遵循[共享规则](src/codex_harness/skills/ebg-review/references/review-rules.md)。
 
-## 4. beg-result-review：结果审查
+## 4. ebg-result-review：结果审查
 
-**描述：** 采纳或汇报实验结果前，审查实际执行、验证和结果分析。Plan 歧义及执行调整审查由 beg-review 分派。
+**描述：** 采纳或汇报实验结果前，审查实际执行、验证和结果分析。Plan 歧义及执行调整审查由 ebg-review 分派。
 
 ### Autoresearch 审查
 
 Stop 时，执行过 Plan、session 调用次数／耗时达到阈值，或记录了结果限制，使用本阶段。只有 adjustment 的独立条件也满足时，才先执行 adjustment。审查覆盖成功、失败、部分完成或不确定的结果。内部迭代不需要重复披露；重要发现随本轮结论一并报告。已修复并重新验证的普通失败，不需要反复提醒。
 
-每项判断都必须使用 `beg_evidence` 检查代码和执行／验证证据，即使起初没有疑点。
+每项判断都必须使用 `ebg_evidence` 检查代码和执行／验证证据，即使起初没有疑点。
 
 研究结论需要实际执行、验证预期行为、能够支持归因的比较，以及准确反映证据和限制的报告。仅有命令成功、测试通过或分数更高，不能证明研究目标已经达成。
 
@@ -96,8 +96,8 @@ Stop 时，执行过 Plan、session 调用次数／耗时达到阈值，或记�
 
 需要披露时，应说明**实际完成了什么，以及还存在哪些重要限制**。使用 `result` 阶段。按最终状态描述已修复的问题，避免重复报告已解决或未变化的发现。
 
-如果重要要求仍有歧义，或方案变化仍需授权，应回到 beg-ambiguity 的过程审查，在最终采纳前澄清。报告限制不能代替解决尚待用户决定的取舍。
+如果重要要求仍有歧义，或方案变化仍需授权，应回到 ebg-ambiguity 的过程审查，在最终采纳前澄清。报告限制不能代替解决尚待用户决定的取舍。
 
 ### 取证流程
 
-使用 `result` 阶段，并遵循[共享取证与披露规则](src/codex_harness/skills/beg-review/references/review-rules.md)；`beg_review` 会随结果清单一并提供这些规则。展开证据或引用来源时，阅读[工具流程](src/codex_harness/skills/beg-review/references/tool-workflows.md)。
+使用 `result` 阶段，并遵循[共享取证与披露规则](src/codex_harness/skills/ebg-review/references/review-rules.md)；`ebg_review` 会随结果清单一并提供这些规则。展开证据或引用来源时，阅读[工具流程](src/codex_harness/skills/ebg-review/references/tool-workflows.md)。

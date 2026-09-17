@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from itertools import zip_longest
 from pathlib import PurePosixPath
 
-from beg.core.model import VisibleBundle
+from ebg.core.model import VisibleBundle
 
 from .backend import TokenCounter, content_identity, pack_read_result
 from .errors import BackendError

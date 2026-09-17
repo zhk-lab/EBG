@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Any
 
-from ..beg.behavior_directory import _explicit_code_name_pattern
+from ..ebg.behavior_directory import _explicit_code_name_pattern
 from .matching import _literal_pattern, _qualified_symbol_aliases
 
 Endpoint = tuple[str, str]

@@ -56,7 +56,7 @@ class ModelConfigTests(unittest.TestCase):
         with ProjectTemporaryDirectory() as root:
             env = root / ".env"
             env.write_text(
-                'BEG_MODEL_PROFILE=GPT_LUNA\n'
+                'EBG_MODEL_PROFILE=GPT_LUNA\n'
                 'JUDGE_MODEL_PROFILE=KIMI\n'
                 'GPT_BASE_URL=https://example.test/v1\n'
                 'GPT_API_KEY="test-key"\n'
@@ -102,9 +102,9 @@ class ModelConfigTests(unittest.TestCase):
 
     def test_cli_and_environment_overrides_and_omit(self) -> None:
         with patch.dict(os.environ, {
-            "BEG_MODEL_PROFILE": "CUSTOM", "CUSTOM_MODEL_NAME": "arbitrary-model",
+            "EBG_MODEL_PROFILE": "CUSTOM", "CUSTOM_MODEL_NAME": "arbitrary-model",
             "CUSTOM_BASE_URL": "https://example.test", "CUSTOM_REASONING_EFFORT": "high",
-            "CUSTOM_TEMPERATURE": "0.7", "BEG_TEMPERATURE": "0.4",
+            "CUSTOM_TEMPERATURE": "0.7", "EBG_TEMPERATURE": "0.4",
         }, clear=True):
             args = argparse.Namespace(env_file=Path("nonexistent.env"), reasoning_effort="omit", temperature="0", top_p="0.9")
             settings = resolve_model_settings(args)
@@ -118,7 +118,7 @@ class ModelConfigTests(unittest.TestCase):
             self.assertEqual(settings.request_options, {})
 
     def test_required_thinking_does_not_accept_none(self) -> None:
-        with patch.dict(os.environ, {"BEG_THINKING_MODE": "required", "BEG_REASONING_EFFORT": "none"}, clear=True):
+        with patch.dict(os.environ, {"EBG_THINKING_MODE": "required", "EBG_REASONING_EFFORT": "none"}, clear=True):
             with self.assertRaisesRegex(ValueError, "conflicts"):
                 resolve_model_settings(argparse.Namespace(env_file=Path("nonexistent.env"), model="test", base_url="https://example.test"))
 

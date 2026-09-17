@@ -1,4 +1,4 @@
-"""Read repository snapshots and cache BEG's per-file construction stages."""
+"""Read repository snapshots and cache EBG's per-file construction stages."""
 
 from __future__ import annotations
 
@@ -9,22 +9,22 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..beg.behavior_atomization import build_behaviors
-from ..beg.core.errors import BEGError
-from ..beg.core.model import RepoArtifact, TaskDocument, VisibleBundle
-from ..beg.evidence_intake import (
+from ..ebg.behavior_atomization import build_behaviors
+from ..ebg.core.errors import EBGError
+from ..ebg.core.model import RepoArtifact, TaskDocument, VisibleBundle
+from ..ebg.evidence_intake import (
     BINARY_EXTENSIONS, CONFIG_EXTENSIONS, EXECUTABLE_EXTENSIONS, SOURCE_EXTENSIONS,
     build_evidence, classify_repository_file, source_symbol_spans,
 )
-from ..beg.graph_assembly import build_graph
-from ..beg.relation_linking import build_edges
+from ..ebg.graph_assembly import build_graph
+from ..ebg.relation_linking import build_edges
 
 from .storage import HarnessError, Store
 from .source_refs import SourceReader, referenced_context
 from .matching import code_terms
 
 
-SKIP_DIRS = {".git", ".venv", ".venv-harness", "venv", "node_modules", "__pycache__", ".beg-harness", ".state", ".tmp", ".tmp-tests", "dist", "build"}
+SKIP_DIRS = {".git", ".venv", ".venv-harness", "venv", "node_modules", "__pycache__", ".ebg-harness", ".state", ".tmp", ".tmp-tests", "dist", "build"}
 GRAPH_VERSION = 2
 
 
@@ -159,10 +159,10 @@ def construct_graph(store: Store, root: Path, files: dict[str, int]) -> tuple[di
                 try:
                     fragment["evidence"] = build_evidence(local)
                     fragment["behaviors"] = build_behaviors(local, fragment["evidence"])
-                except BEGError as error:
+                except EBGError as error:
                     fragment["evidence"] = []
                     fragment["behaviors"] = []
-                    fragment["notes"].append(f"{path}: BEG atomization unavailable ({error}); raw source retained")
+                    fragment["notes"].append(f"{path}: EBG atomization unavailable ({error}); raw source retained")
             fragment['contexts'] = [referenced_context(c, files) for c in fragment['contexts']]
             for node in fragment['evidence']:
                 node['terms'] = code_terms(node.pop('content'))

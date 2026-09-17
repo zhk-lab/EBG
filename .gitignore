@@ -24,7 +24,7 @@ htmlcov/
 *.bak
 test_harness/
 /.agents/
-/.beg-harness/
+/.ebg-harness/
 /.codex/
 
 # Packaging output

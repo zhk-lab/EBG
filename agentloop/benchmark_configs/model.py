@@ -114,7 +114,7 @@ class RepoBenchmarkConfig:
         task_document_name: str,
         task_document: str,
         initial_index: str,
-        prompt_variant: PromptVariant = "BEG",
+        prompt_variant: PromptVariant = "EBG",
         source_texts: dict[str, str] | None = None,
         task_prompt: str | None = None,
         prediction_schema: dict[str, Any] | None = None,
@@ -123,7 +123,7 @@ class RepoBenchmarkConfig:
 
         self.validate_task_document(task_document_name)
         schema_filename = self.prediction_schema_filename
-        if self.benchmark == "silentswap" and prompt_variant == "BEG":
+        if self.benchmark == "silentswap" and prompt_variant == "EBG":
             schema_filename = "silentswap_location_prediction.schema.json"
         schema = prediction_schema if prediction_schema is not None else load_prediction_schema(
             schema_root, schema_filename,
@@ -160,8 +160,8 @@ class RepoBenchmarkConfig:
             ),
             "task_prompts": {
                 "raw": f"prompts/baseline/{self.benchmark}.txt",
-                "graph": ("prompts/BEG/silentswap1.txt" if self.benchmark == "silentswap"
-                          else f"prompts/BEG/{self.benchmark}.txt"),
+                "graph": ("prompts/EBG/silentswap1.txt" if self.benchmark == "silentswap"
+                          else f"prompts/EBG/{self.benchmark}.txt"),
             },
             "prediction_schema_filename": self.prediction_schema_filename,
             "grounding_profile": self.grounding_profile,

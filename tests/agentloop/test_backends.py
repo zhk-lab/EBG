@@ -13,7 +13,7 @@ from agentloop.backend import pack_read_result
 from agentloop.evidence import EvidenceUnit, render_tool_result
 from agentloop.errors import ContextUnfitError
 from agentloop.raw_backend import RawBackend
-from beg.core.model import RepoArtifact, TaskDocument, VisibleBundle
+from ebg.core.model import RepoArtifact, TaskDocument, VisibleBundle
 from evaluation_core.contracts import EvidenceSpan
 
 

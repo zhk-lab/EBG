@@ -18,17 +18,17 @@ from agentloop.errors import AgentLoopError
 from tracereview import TraceReview, render_trace_view
 from evaluation_core.contracts import load_prediction_schema
 from evaluation_core.messages import build_trace_review_messages, load_task_prompt
-from beg.behavior_atomization import build_behaviors
-from beg.evidence_intake import build_evidence, load_visible_bundle
-from beg.graph_assembly import build_graph
-from beg.relation_linking import build_edges
+from ebg.behavior_atomization import build_behaviors
+from ebg.evidence_intake import build_evidence, load_visible_bundle
+from ebg.graph_assembly import build_graph
+from ebg.relation_linking import build_edges
 from tests.support import ProjectTemporaryDirectory, make_trace_bundle
 
 
 def trace_messages(view, _schema):
     return build_trace_review_messages(
         input_id="ft_001_long",
-        task_prompt=load_task_prompt("BEG", "feedbacktrace"),
+        task_prompt=load_task_prompt("EBG", "feedbacktrace"),
         trace_view=view.text,
     )
 

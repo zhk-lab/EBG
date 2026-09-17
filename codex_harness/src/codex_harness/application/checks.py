@@ -21,34 +21,34 @@ TRIGGERS = {'result', 'adjustment', 'ambiguity'}
 
 
 def _review_protocol(trigger: str) -> dict[str, str]:
-    name = {'result': 'beg-result-review', 'ambiguity': 'beg-ambiguity', 'adjustment': 'beg-adjustment'}[trigger]
+    name = {'result': 'ebg-result-review', 'ambiguity': 'ebg-ambiguity', 'adjustment': 'ebg-adjustment'}[trigger]
     resources = resource_files('codex_harness').joinpath('skills')
     skill = resources.joinpath(name, 'SKILL.md')
     _, marker, section = skill.read_text(encoding='utf-8').partition('## Autoresearch review\n')
     if not marker:
         raise HarnessError(f'{name} Skill is missing its Autoresearch review section.')
-    shared = resources.joinpath('beg-review', 'references', 'review-rules.md').read_text(encoding='utf-8')
+    shared = resources.joinpath('ebg-review', 'references', 'review-rules.md').read_text(encoding='utf-8')
     return {'source': f'{name}/SKILL.md :: Autoresearch review',
-            'shared_source': 'beg-review/references/review-rules.md',
+            'shared_source': 'ebg-review/references/review-rules.md',
             'content': section.split('\n## ', 1)[0].strip() + '\n\n' + shared.strip(),
             'note': 'Apply to research decisions and conclusions at the relevant disclosure stage. This is review guidance, not a user requirement or a finding.'}
 
 REVIEW_GUIDANCE = {
     'result': (
-        '按 beg-result-review 核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
+        '按 ebg-result-review 核对实际执行、实际验证和结果分析，成功、失败、部分完成或不确定均需检查。'
         '追踪实际执行分支，核实测试及断言是否检验成功条件，判断数据、配置、资源与结果选择是否支持提升归因。'
         '采用结果前先检查；不必每次内部试验都披露，在本轮汇报中说明实际完成情况与仍影响结论的重要限制。'
-        '每项审查必须 beg_evidence 核对相关代码、数据和执行证据；不能用分数或成功标记代替实验有效性判断。'
+        '每项审查必须 ebg_evidence 核对相关代码、数据和执行证据；不能用分数或成功标记代替实验有效性判断。'
         '发现影响任务的歧义时，建议及时暂停当前任务并向用户反馈，不等做完再说明；需要用户确认的取舍未解决时，不能仅因已披露就判该决定 clear。'
     ),
     'adjustment': (
-        '按 beg-adjustment 在结束前复核原要求、受阻证据、实际调整或回退、影响和已有授权。'
+        '按 ebg-adjustment 在结束前复核原要求、受阻证据、实际调整或回退、影响和已有授权。'
         '工具失败只是检查信号，不证明需要变更方案或向用户披露。'
         '授权内调整在执行中记录，结束前统一取证复核；需要用户取舍且已有授权未覆盖时，记录等待澄清并立即提问。'
         '普通重试或已修复并验证的临时失败不必反复报告，替代操作成功不等于原要求已满足。'
     ),
     'ambiguity': (
-        '按 beg-ambiguity 在执行 Plan 前审查，区分用户明确要求、Agent 自拟计划与未确定假设。'
+        '按 ebg-ambiguity 在执行 Plan 前审查，区分用户明确要求、Agent 自拟计划与未确定假设。'
         '明确歧义、拟采用的解释及其对目标、约束、验收或实验结论的影响，在落实关键解释前披露。'
         '发现可能实质影响目标、执行方式、验收或结果解释的歧义时，建议及时暂停当前任务，向用户说明歧义、可能影响和需要澄清的问题，不等做完再反馈。'
         '必要取证围绕歧义展开，避免继续推进任务而延后汇报；需要用户作出且已有授权未覆盖的取舍，等待答复后再恢复。默认值或已披露的假设不能代替确认。'
@@ -181,7 +181,7 @@ class Checks:
                        'note': ('本检查点早于新的工具执行；读取适用的 latest_check_id，若为空则新建检查点。'
                                 if newer else '仅核对当前冻结材料；之后的新执行需重新检查。'),
                    },
-                   'note': '每项审查必须调用 beg_evidence；adjustment/result 必须核对相关代码与执行验证证据，不能只凭 trace 或分数判断。核实后用 beg_record 保存判断。读取或记录不等于向用户披露。',
+                   'note': '每项审查必须调用 ebg_evidence；adjustment/result 必须核对相关代码与执行验证证据，不能只凭 trace 或分数判断。核实后用 ebg_record 保存判断。读取或记录不等于向用户披露。',
                    'review_guidance': REVIEW_GUIDANCE[check['trigger']] +
                        '只披露证据支持且影响结论或决策的问题，不把尚未检查的可能性写成事实。',
                    'review_protocol': check.get('review_protocol', {}),
@@ -225,7 +225,7 @@ class Checks:
             raise HarnessError('Assessment needs clear/issue/uncertain and a nonempty summary.')
         check = self.get(check_id)
         if not check.get('evidence_queries'):
-            raise HarnessError('Call beg_evidence with a concrete question before recording any assessment.')
+            raise HarnessError('Call ebg_evidence with a concrete question before recording any assessment.')
         if waiting_for_user and (conclusion == 'clear' or resolution is not None):
             raise HarnessError('A pending user choice cannot be clear or resolved at the same time.')
         with runtime(self.store, check['session_id']) as state:

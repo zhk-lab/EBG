@@ -1035,7 +1035,7 @@ def _validate_feedbacktrace_result(
 
 def _load_judge_module(benchmark: str) -> ModuleType:
     path = PROJECT_ROOT / "evaluation" / benchmark / "judge" / "judge.py"
-    spec = importlib.util.spec_from_file_location(f"beg_{benchmark}_judge", path)
+    spec = importlib.util.spec_from_file_location(f"ebg_{benchmark}_judge", path)
     if spec is None or spec.loader is None:
         raise BatchJudgeError(f"cannot load Judge module: {path}")
     module = importlib.util.module_from_spec(spec)

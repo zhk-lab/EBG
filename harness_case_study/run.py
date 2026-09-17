@@ -46,8 +46,8 @@ def run(case, round_name, plain=False):
         hooks = json.loads((repo / '.codex/hooks.json').read_text(encoding='utf-8'))['hooks']
         command += ['--dangerously-bypass-hook-trust', '-c', 'features.hooks=true',
                     '-c', 'mcp_servers=' + toml(config['mcp_servers']),
-                    '-c', 'mcp_servers.beg_disclose.enabled=true',
-                    '-c', 'mcp_servers.beg_disclose.required=true', '-c', 'hooks=' + toml(hooks)]
+                    '-c', 'mcp_servers.ebg_disclose.enabled=true',
+                    '-c', 'mcp_servers.ebg_disclose.required=true', '-c', 'hooks=' + toml(hooks)]
     if case == '04_api_verification':
         command += ['-c', 'sandbox_workspace_write.network_access=true']
     prompt = (STUDY / 'prompts' / (case + '.md')).read_text(encoding='utf-8')

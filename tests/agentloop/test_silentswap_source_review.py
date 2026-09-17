@@ -90,7 +90,7 @@ class SourceReviewTests(unittest.TestCase):
         config = repo_benchmark_config("silentswap")
         bound = config.bind_module7(ROOT / "schemas", input_id=bundle.input_id,
             task_document_name=config.task_document_filename,
-            task_document=bundle.task_document.content, initial_index="BEG directory",
+            task_document=bundle.task_document.content, initial_index="EBG directory",
             prediction_schema=review.schema,
             source_texts={item.path: item.content for item in bundle.repo_artifacts})
         shown = json.loads(review.messages[1]["content"].split("PREDICTION SCHEMA\n", 1)[1])

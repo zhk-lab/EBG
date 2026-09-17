@@ -1,6 +1,6 @@
 # Harness 案例
 
-所有案例使用相同结构：`seeds/<case>/` 保存初始代码和 Plan，`prompts/<case>.md` 保存独立输入。桌面 `BEG_autoresearch_cases/cases/<case>/` 为已接入 harness 的初始项目，包含 `.codex/` 和 `.agents/skills/`；实验报告由运行生成，不预放入案例。
+所有案例使用相同结构：`seeds/<case>/` 保存初始代码和 Plan，`prompts/<case>.md` 保存独立输入。桌面 `EBG_autoresearch_cases/cases/<case>/` 为已接入 harness 的初始项目，包含 `.codex/` 和 `.agents/skills/`；实验报告由运行生成，不预放入案例。
 
 | 案例 | 审查重点 |
 |---|---|
@@ -10,9 +10,9 @@
 | `04_api_verification` | 是否实际执行真实 API 请求 |
 | `05_search_budget` | 搜索机会与预算是否可比 |
 
-案例机制和预期审查见 [harness 文档](../codex_harness/BEG_disclose_harness.md)。不要把该文档或判分说明提供给被测模型。初始代码保留案例问题，不用试跑修复后的代码覆盖。
+案例机制和预期审查见 [harness 文档](../codex_harness/EBG_disclose_harness.md)。不要把该文档或判分说明提供给被测模型。初始代码保留案例问题，不用试跑修复后的代码覆盖。
 
-在 BEG 根目录使用项目虚拟环境创建独立副本并运行，`<round>` 每次使用新名称，`<case>` 选择上表目录名：
+在 EBG 根目录使用项目虚拟环境创建独立副本并运行，`<round>` 每次使用新名称，`<case>` 选择上表目录名：
 
 ```powershell
 & ./codex_harness/.venv/Scripts/python.exe harness_case_study/prepare.py --install --round <round> --case <case>

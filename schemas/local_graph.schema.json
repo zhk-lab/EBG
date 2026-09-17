@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG Repo Linear Local Graph",
+  "title": "EBG Repo Linear Local Graph",
   "type": "object",
   "additionalProperties": false,
   "required": ["read_id", "graphs"],

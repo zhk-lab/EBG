@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "beg-codex-harness"
+name = "ebg-codex-harness"
 version = "0.1.0"
-description = "Source-backed disclosure tools for Codex using BEG"
+description = "Source-backed disclosure tools for Codex using EBG"
 requires-python = ">=3.11"
 dependencies = ["mcp>=1.29.1,<2", "PyYAML>=6.0", "tiktoken>=0.7"]
 
 [project.scripts]
-beg-harness = "codex_harness.__main__:main"
+ebg-harness = "codex_harness.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

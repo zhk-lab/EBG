@@ -64,9 +64,9 @@ def _plan_check(harness: Harness, plan: str, event_ids: list[str] | None = None)
     with runtime(harness.store, session) as state:
         state['plan_checks'][plan] = {'content': content, 'request': request, 'check_id': check['id']}
         state['plan_seen'] = True
-    return _context('PostToolUse', f'BEG：使用 beg-review。读取 beg_review(check_id="{check["id"]}")，'
-                    '必须 beg_evidence 核实目标与实现前提；材料不足可继续读，执行 Plan 前完成检查。'
-                    '需要用户选择时用 beg_record(waiting_for_user=true) 记录并立即提问。')
+    return _context('PostToolUse', f'EBG：使用 ebg-review。读取 ebg_review(check_id="{check["id"]}")，'
+                    '必须 ebg_evidence 核实目标与实现前提；材料不足可继续读，执行 Plan 前完成检查。'
+                    '需要用户选择时用 ebg_record(waiting_for_user=true) 记录并立即提问。')
 
 
 def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +79,7 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
         with runtime(harness.store, session) as state:
             # A restored process must not charge the disconnected interval as research time.
             state['active_since'] = None
-        return _context(name, f'BEG session_id={session} autoresearch：使用 beg-review 总 Skill；统计和检查按 session 保留。')
+        return _context(name, f'EBG session_id={session} autoresearch：使用 ebg-review 总 Skill；统计和检查按 session 保留。')
     if name == 'UserPromptSubmit':
         internal = any(c.get('stop_reason') == payload['prompt'] for c in harness.checks.all()
                        if c['session_id'] == session)
@@ -96,15 +96,15 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
                     state['plan_seen'] = True
             waiting = state['waiting']
         if waiting:
-            return _context(name, 'BEG：仍有待澄清决定。核对本次答复；只有解决后才用 '
-                            'beg_record(resolution=答复如何解决问题) 清除等待状态，不能自动视为已确认。')
+            return _context(name, 'EBG：仍有待澄清决定。核对本次答复；只有解决后才用 '
+                            'ebg_record(resolution=答复如何解决问题) 清除等待状态，不能自动视为已确认。')
         if plan == '@context':
             result = _plan_check(harness, plan)
             if result:
                 result['hookSpecificOutput']['hookEventName'] = name
                 return result
-        return _context(name, f'BEG session_id={session}：仅执行 Plan 时做 ambiguity；读完待执行 Plan 后检查。'
-                        '未被 Hook 识别的 Plan 执行意图，由 Codex 主动 beg_review(trigger="ambiguity", focus=具体计划)。'
+        return _context(name, f'EBG session_id={session}：仅执行 Plan 时做 ambiguity；读完待执行 Plan 后检查。'
+                        '未被 Hook 识别的 Plan 执行意图，由 Codex 主动 ebg_review(trigger="ambiguity", focus=具体计划)。'
                         '普通 Prompt 不做 ambiguity；执行中先记录，Stop 分别判断 adjustment/result，'
                         '只检查满足触发条件的阶段；两类都触发时先 adjustment、后 result。')
     if session != harness.store.current_session():
@@ -114,7 +114,7 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
         return {}
     if name in {'PreToolUse', 'PostToolUse'}:
         tool = payload['tool_name']
-        if tool.rsplit('__', 1)[-1].startswith('beg_'):
+        if tool.rsplit('__', 1)[-1].startswith('ebg_'):
             return {}
         original_id = payload['tool_use_id']
         call_id = f"{turn['number']}:{original_id}"
@@ -197,9 +197,9 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
                 state['batch'] = batch
         pending = [identifier for identifier in batch['checks'] if not harness.checks.get(identifier)['assessment']]
         if pending and not payload.get('stop_hook_active') and not internal:
-            reason = ('BEG autoresearch：结束前依次检查 ' + '、'.join(pending) +
-                      '。对每项调用 beg_review(check_id=...)，必须 beg_evidence 核对代码、数据和执行验证证据，'
-                      '再 beg_record。只检查已触发的阶段；两类都触发时先 adjustment、后 result。最终完整回答原始实验任务，说明目标是否达成、'
+            reason = ('EBG autoresearch：结束前依次检查 ' + '、'.join(pending) +
+                      '。对每项调用 ebg_review(check_id=...)，必须 ebg_evidence 核对代码、数据和执行验证证据，'
+                      '再 ebg_record。只检查已触发的阶段；两类都触发时先 adjustment、后 result。最终完整回答原始实验任务，说明目标是否达成、'
                       '实际保留或回退的方案、关键依据及限制。不要只回复检查已完成或内部编号。'
                       '这是系统续跑提示，不是新的用户任务要求。')
             for identifier in batch['checks']:

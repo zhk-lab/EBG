@@ -39,41 +39,41 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     async with ClientSession(reader, writer) as session:
                         await session.initialize()
                         names = {t.name for t in (await session.list_tools()).tools}
-                        self.assertEqual(names, {'beg_review', 'beg_evidence', 'beg_record'})
+                        self.assertEqual(names, {'ebg_review', 'ebg_evidence', 'ebg_record'})
                         async def call(name, arguments):
                             response = await session.call_tool(name, arguments)
                             self.assertFalse(response.isError, response.content)
                             return yaml.safe_load(response.content[0].text)
-                        for removed in ('beg_list_task_sources', 'beg_select_task', 'beg_build_evidence_groups'):
+                        for removed in ('ebg_list_task_sources', 'ebg_select_task', 'ebg_build_evidence_groups'):
                             response = await session.call_tool(removed, {})
                             self.assertTrue(response.isError)
-                        active = await call('beg_review', {'trigger': 'result', 'focus': 'Report app.py behavior'})
+                        active = await call('ebg_review', {'trigger': 'result', 'focus': 'Report app.py behavior'})
                         self.assertNotIn('code_evidence', active)
                         self.assertNotIn('UNRELATED LIVE CODE', str(active))
                         check_id = active['check_id']
-                        review_copy = await call('beg_evidence', {'check_id': check_id, 'read_ref': active['read_ref']})
+                        review_copy = await call('ebg_evidence', {'check_id': check_id, 'read_ref': active['read_ref']})
                         self.assertEqual(review_copy, active)
                         code.write_text('CHANGED AFTER CHECK', encoding='utf-8')
-                        proof = await call('beg_evidence', {'check_id': check_id, 'question': 'What is in app.py?',
+                        proof = await call('ebg_evidence', {'check_id': check_id, 'question': 'What is in app.py?',
                             'refs': [{'source_id': 'P1', 'quote': prompt}]})
                         self.assertIn('questions', proof)
                         self.assertNotIn('CHANGED AFTER CHECK', str(proof))
                         self.assertIn('UNRELATED LIVE CODE', str(proof))
-                        changes = await call('beg_evidence', {'check_id': check_id,
+                        changes = await call('ebg_evidence', {'check_id': check_id,
                             'read_ref': proof['changes']['read_ref']})
                         ref = next(e['read_ref'] for e in changes['content'] if e['path'] == 'app.py')
-                        diff = await call('beg_evidence', {'check_id': check_id, 'read_ref': ref})
+                        diff = await call('ebg_evidence', {'check_id': check_id, 'read_ref': ref})
                         self.assertIn('-    return 2', diff['content'])
                         self.assertIn('+UNRELATED LIVE CODE', diff['content'])
                         self.assertNotIn('CHANGED AFTER CHECK', diff['content'])
-                        reread = await call('beg_evidence', {'check_id': check_id, 'read_ref': proof['read_ref']})
+                        reread = await call('ebg_evidence', {'check_id': check_id, 'read_ref': proof['read_ref']})
                         self.assertEqual(reread, proof)
-                        done = await call('beg_record', {'check_id': check_id, 'conclusion': 'issue',
+                        done = await call('ebg_record', {'check_id': check_id, 'conclusion': 'issue',
                                                          'summary': 'Current code differs from the reported implementation.'})
                         self.assertEqual(done['conclusion'], 'issue')
                         self.assertTrue(done['recorded'])
                         self.assertNotIn('review_protocol', done)
-                        final = await call('beg_review', {'check_id': check_id})
+                        final = await call('ebg_review', {'check_id': check_id})
                         self.assertEqual(final['assessment']['conclusion'], 'issue')
 
     def test_hook_cli_stdout_is_json_and_does_not_block_turn(self):
@@ -99,7 +99,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             output, state = root / "integration files", root / "state files ' $data"
             write_integration(output, state, sys.executable)
             config = tomllib.loads((output / "config.toml").read_text(encoding="utf-8"))
-            self.assertIn(str(state), config["mcp_servers"]["beg_disclose"]["args"])
+            self.assertIn(str(state), config["mcp_servers"]["ebg_disclose"]["args"])
             hooks = json.loads((output / "hooks.json").read_text(encoding="utf-8"))
             command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["commandWindows"]
             # Codex uses the session shell; the Windows default is PowerShell.

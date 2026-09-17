@@ -54,7 +54,7 @@ def linked_artifacts(store, view, seeds, *, limit=24, max_depth=3):
             elif FILE_REFERENCE.search(content):
                 limited = True
             if target.endswith('.py'):
-                continue  # Code excerpts are supplied by BEG; follow their file references only.
+                continue  # Code excerpts are supplied by EBG; follow their file references only.
             lines = content.splitlines(keepends=True)
             excerpt = content if len(content) <= 4000 else ''.join(lines[:8])[:1200]
             items.append({'path': target, 'from': origin, 'reference': reference, 'match': basis,

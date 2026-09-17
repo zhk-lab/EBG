@@ -22,7 +22,7 @@ for event in events:
                           'status': item.get('status'), 'error': item.get('error')}, ensure_ascii=False))
     elif event['type'] == 'item.completed' and item.get('type') == 'agent_message':
         print('MESSAGE:', item.get('text', '')[:1500])
-db_path = DESKTOP / args.round / args.case / '.beg-harness/harness.sqlite3'
+db_path = DESKTOP / args.round / args.case / '.ebg-harness/harness.sqlite3'
 if db_path.exists():
     with sqlite3.connect(db_path) as db:
         for (data,) in db.execute('SELECT data FROM checkpoints'):

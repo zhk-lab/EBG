@@ -1,4 +1,4 @@
-"""Prepare/run independent source recovery after saved BEG, or combine stage scores."""
+"""Prepare/run independent source recovery after saved EBG, or combine stage scores."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from agentloop.silentswap_source_review import (
     freeze_json, load_stage1, read_json, run_review, save_request,
 )
 from agentloop.storage import RunStore
-from beg.evidence_intake import load_visible_bundle
+from ebg.evidence_intake import load_visible_bundle
 from evaluation_core.contracts import load_prediction_schema
 from scripts.main.layout import update_summary
 from scripts.main.predict import _client, collect_response_usage
@@ -93,7 +93,7 @@ def aggregate(args, manifest):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--experiment", choices=("terra", "sol", "gpt5.6", "kimi-k3", "deepseek_flash", "deepseek_pro", "claude"),
-                        help="Use the model's formal SilentSwap BEG stage1/stage2 directories")
+                        help="Use the model's formal SilentSwap EBG stage1/stage2 directories")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--artifact-root", type=Path, default=ROOT / "evaluation/silentswap/artifacts")
@@ -111,12 +111,12 @@ def main(argv=None):
     if args.experiment:
         if args.source or args.output:
             parser.error("--experiment cannot be combined with --source or --output")
-        experiment = ROOT / "experiments/silentswap" / args.experiment / "BEG"
+        experiment = ROOT / "experiments/EBG/silentswap" / args.experiment
         args.source, args.output = experiment / "stage1", experiment / "stage2"
         if args.experiment == "deepseek_flash" and not (args.judge or args.aggregate) and args.model is None:
             args.model = "deepseek-flash"
     if args.source is None:
-        args.source = ROOT / "experiments/silentswap/terra/BEG/stage1"
+        args.source = ROOT / "experiments/EBG/silentswap/terra/stage1"
     if args.output is None:
         parser.error("provide --experiment or --output")
     if args.workers is None:
@@ -157,7 +157,7 @@ def main(argv=None):
 
     source = read_json(args.source / "manifest.json")
     if source["benchmarks"] != ["silentswap"] or source["arms"] != ["graph"]:
-        parser.error("source must be an ordinary single-arm SilentSwap BEG experiment")
+        parser.error("source must be an ordinary single-arm SilentSwap EBG experiment")
     source_ids = source["selected_ids"]["silentswap"]
     ids = args.ids if args.ids is not None else source_ids
     if not ids or len(ids) != len(set(ids)) or any(i not in source_ids for i in ids):

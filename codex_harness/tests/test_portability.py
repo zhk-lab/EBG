@@ -26,7 +26,7 @@ from pathlib import Path
 
 class BlockOriginalProject(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'beg', 'agentloop', 'evaluation_core', 'tracereview', 'tests'}:
+        if fullname.split('.')[0] in {'ebg', 'agentloop', 'evaluation_core', 'tracereview', 'tests'}:
             raise ImportError('Original project import is unavailable: ' + fullname)
 
 sys.meta_path.insert(0, BlockOriginalProject())

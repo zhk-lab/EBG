@@ -68,7 +68,7 @@ class CollectionBoundaryTests(unittest.TestCase):
         task, requirements = self.select_plan()
         payload = yaml.safe_load(self.harness.build_evidence_groups(task, requirements))
         self.assertNotIn('未匹配到执行 Trace', payload['evidence_groups']['R1'].get('note', ''))
-        self.assertIn('未采集不等于不存在', payload['beg_disclose_prompt'])
+        self.assertIn('未采集不等于不存在', payload['ebg_disclose_prompt'])
 
     def test_historical_inventory_is_frozen_and_binary_conversion_is_not_deletion(self):
         asset = self.repo / 'asset.dat'

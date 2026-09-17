@@ -31,7 +31,7 @@ class LocationStageTests(unittest.TestCase):
         bound = config.bind_module7(
             ROOT / "schemas", input_id=bundle.input_id,
             task_document_name=config.task_document_filename,
-            task_document=bundle.task_document.content, initial_index="BEG directory",
+            task_document=bundle.task_document.content, initial_index="EBG directory",
             source_texts=review.sources,
         )
         bound.finish_contract.validate(targets, input_id=bundle.input_id, observed_spans=review.spans)

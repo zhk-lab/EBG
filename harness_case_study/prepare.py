@@ -10,7 +10,7 @@ from codex_harness.integration import write_integration
 
 STUDY = Path(__file__).resolve().parent
 ROOT = next(p for p in STUDY.parents if (p / 'codex_harness/pyproject.toml').is_file())
-DESKTOP = ROOT.parent / 'BEG_autoresearch_cases'
+DESKTOP = ROOT.parent / 'EBG_autoresearch_cases'
 CASES = ('01_ambiguity', '02_adjustment', '03_data_leakage', '04_api_verification', '05_search_budget')
 
 
@@ -36,10 +36,10 @@ def install(case, round_name, harness=True):
     shutil.copytree(STUDY / 'seeds' / case, destination,
                     ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     if case == '04_api_verification':
-        shutil.copyfile(ROOT / '.tmp/beg-retest/seeds/case2/.env', destination / '.env')
-    put(destination, '.gitignore', '.beg-harness/\n.agents/\n.codex/\n__pycache__/\n.env\n')
+        shutil.copyfile(ROOT / '.tmp/ebg-retest/seeds/case2/.env', destination / '.env')
+    put(destination, '.gitignore', '.ebg-harness/\n.agents/\n.codex/\n__pycache__/\n.env\n')
     if harness:
-        write_integration(destination / '.codex', destination / '.beg-harness', sys.executable)
+        write_integration(destination / '.codex', destination / '.ebg-harness', sys.executable)
         (destination / '.agents').mkdir()
         shutil.move(str(destination / '.codex/skills'), str(destination / '.agents/skills'))
     return destination

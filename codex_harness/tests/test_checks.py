@@ -144,12 +144,12 @@ class CheckTests(unittest.TestCase):
 
     def test_review_routes_stage_content_and_freezes_shared_rules(self):
         package = self.root / 'package'
-        for name, marker in [('beg-ambiguity', 'PROCESS ONLY'), ('beg-adjustment', 'PROCESS ONLY'),
-                             ('beg-result-review', 'RESULT ONLY')]:
+        for name, marker in [('ebg-ambiguity', 'PROCESS ONLY'), ('ebg-adjustment', 'PROCESS ONLY'),
+                             ('ebg-result-review', 'RESULT ONLY')]:
             folder = package / 'skills' / name
             folder.mkdir(parents=True)
             (folder / 'SKILL.md').write_text('## Autoresearch review\n' + marker, encoding='utf-8')
-        shared = package / 'skills/beg-review/references/review-rules.md'
+        shared = package / 'skills/ebg-review/references/review-rules.md'
         shared.parent.mkdir(parents=True)
         shared.write_text('SHARED RULES', encoding='utf-8')
         with patch('codex_harness.application.checks.resource_files', return_value=package):
@@ -217,7 +217,7 @@ class CheckTests(unittest.TestCase):
         code = self.evidence(check_id=ctx['check_id'], read_ref=view['view_id'] + ':repo:train.py')
         self.assertIn('return 30', str(code))
 
-    def test_failure_signal_keeps_result_and_beg_calls_do_not_recurse(self):
+    def test_failure_signal_keeps_result_and_ebg_calls_do_not_recurse(self):
         result = self.hook('PostToolUse', tool_name='Bash', tool_use_id='fail',
                            tool_input={'command': 'python train.py'}, tool_response={'exit_code': 1})
         self.assertNotIn('decision', result)
@@ -226,7 +226,7 @@ class CheckTests(unittest.TestCase):
         ctx = self.review(trigger='adjustment', focus='Review failure at the end')
         self.assertIn('"exit_code": 1', str(ctx['trace']))
         count = len(self.harness.sessions.events('s'))
-        self.hook('PostToolUse', tool_name='mcp__beg_disclose__beg_evidence', tool_use_id='self',
+        self.hook('PostToolUse', tool_name='mcp__ebg_disclose__ebg_evidence', tool_use_id='self',
                   tool_input={}, tool_response={'isError': True})
         self.assertEqual(count, len(self.harness.sessions.events('s')))
         self.assertEqual(self.hook('PostToolUse', tool_name='Read', tool_use_id='text',

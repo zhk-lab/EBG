@@ -23,23 +23,23 @@ def write(path, value):
 class SourceReviewCommandTests(unittest.TestCase):
     def test_formal_experiment_judge_uses_stage_directories_and_saved_workers(self):
         with ProjectTemporaryDirectory() as root:
-            beg = root / "experiments/silentswap/sol/BEG"
+            ebg = root / "experiments/EBG/silentswap/sol"
             judge = "glm-5-2"
-            write(beg / "stage2/manifest.json", {
-                "source_experiment": str((beg / "stage1").resolve()),
-                "workflow": "beg_independent_source_review_v5",
+            write(ebg / "stage2/manifest.json", {
+                "source_experiment": str((ebg / "stage1").resolve()),
+                "workflow": "ebg_independent_source_review_v5",
             })
-            write(beg / "stage1/judges" / judge / "manifest.json", {
+            write(ebg / "stage1/judges" / judge / "manifest.json", {
                 "base_url": "http://127.0.0.1:28080/v1", "judge_model": judge, "phase": "full",
             })
-            write(beg / "stage2/judges" / judge / "manifest.json", {"workers": 20})
+            write(ebg / "stage2/judges" / judge / "manifest.json", {"workers": 20})
             with patch("scripts.main.source_review.ROOT", root), \
                  patch("scripts.main.source_review.aggregate", return_value={"status": "complete"}), \
                  patch("scripts.main.source_review.run_batch_judges") as judge_batch, \
                  patch("scripts.main.source_review.run_sample") as predict, patch("builtins.print"):
                 self.assertEqual(main(["--experiment", "sol", "--judge", "--judge-model", judge]), 0)
             predict.assert_not_called()
-            self.assertEqual(judge_batch.call_args.args[0].output_root, beg / "stage2")
+            self.assertEqual(judge_batch.call_args.args[0].output_root, ebg / "stage2")
             self.assertEqual(judge_batch.call_args.args[0].workers, 20)
 
     def test_explicit_second_stage_model_is_saved_and_used(self):

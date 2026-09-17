@@ -54,7 +54,7 @@ class SessionReviewTests(unittest.TestCase):
         self.hook('UserPromptSubmit', prompt='Follow PLAN.md and run train.py.')
         self.assertEqual(self.h.checks.all(), [])
         call = dict(tool_use_id='read', tool_name='Read', tool_input={'path': 'PLAN.md'}, tool_response='Plan')
-        self.assertIn('beg_review', str(self.hook('PostToolUse', **call)))
+        self.assertIn('ebg_review', str(self.hook('PostToolUse', **call)))
         self.assertEqual(self.hook('PostToolUse', **call), {})
         self.assertEqual([c['trigger'] for c in self.h.checks.all()], ['ambiguity'])
         (self.repo / 'PLAN.md').write_text('Use a different evaluation split.', encoding='utf-8')
@@ -108,7 +108,7 @@ class SessionReviewTests(unittest.TestCase):
         check = self.h.checks.create('result', 'Report train.py')
         review = yaml.safe_load(self.h.checks.review(check_id=check['id']))
         self.h.checks.evidence(check['id'], read_ref=review['read_ref'])
-        with self.assertRaisesRegex(HarnessError, 'beg_evidence'):
+        with self.assertRaisesRegex(HarnessError, 'ebg_evidence'):
             self.h.checks.record(check['id'], 'clear', 'Looks good.')
         with patch.object(self.h, 'build_evidence_groups', side_effect=HarnessError('Unavailable')):
             with self.assertRaisesRegex(HarnessError, 'Unavailable'):
@@ -135,7 +135,7 @@ class SessionReviewTests(unittest.TestCase):
         self.hook('UserPromptSubmit', prompt='按照 PLAN.md 执行实验。')
         result = self.hook('PostToolUse', tool_name='exec_command', tool_use_id='read',
                            tool_input={'cmd': 'Get-Content -Encoding UTF8 PLAN.md'}, tool_response='Plan text')
-        self.assertIn('beg_review', str(result))
+        self.assertIn('ebg_review', str(result))
         self.assertEqual(self.h.checks.all()[0]['trigger'], 'ambiguity')
 
     def test_changed_code_in_continuation_is_not_reused(self):

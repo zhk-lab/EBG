@@ -1,4 +1,4 @@
-"""Independent source recovery after an ordinary BEG localization run."""
+"""Independent source recovery after an ordinary EBG localization run."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from evaluation_core.contracts import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-PROMPT_PATH = ROOT / "prompts/BEG/silentswap2.txt"
+PROMPT_PATH = ROOT / "prompts/EBG/silentswap2.txt"
 CONFIG = replace(DEFAULT_CONFIG, format_repair_attempts=1)
-WORKFLOW = "beg_independent_source_review_v5"
+WORKFLOW = "ebg_independent_source_review_v5"
 SELECTION_POLICY = "directory_top6_union_read_files"
 
 
@@ -58,7 +58,7 @@ def load_stage1(run: Path) -> tuple[dict, dict, Path]:
                 if read_json(path).get("status") == "complete":
                     matches.append(path)
         if len(matches) != 1:
-            raise AgentLoopError(f"cannot select a unique completed BEG history: {run}")
+            raise AgentLoopError(f"cannot select a unique completed EBG history: {run}")
         source = matches[0]
     state = read_json(source)
     if state.get("input_id") != prediction.get("input_id"):

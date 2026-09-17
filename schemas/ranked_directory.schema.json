@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "BEG Repo Ranked Directory",
+  "title": "EBG Repo Ranked Directory",
   "type": "object",
   "additionalProperties": false,
   "required": [

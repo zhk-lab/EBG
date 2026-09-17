@@ -16,7 +16,7 @@ def main() -> int:
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description='BEG disclosure harness')
+    parser = argparse.ArgumentParser(description='EBG disclosure harness')
     parser.add_argument('--state-dir', default='.state/runtime')
     parser.add_argument('--token-budget', type=int, default=12_000)
     parser.add_argument('--review-call-threshold', type=int, default=10)
@@ -50,7 +50,7 @@ def main() -> int:
             print(json.dumps(handle_hook(harness, json.load(sys.stdin)), ensure_ascii=False))
         return 0
     except (HarnessError, OSError, KeyError, json.JSONDecodeError) as error:
-        print(f'BEG: {error}', file=sys.stderr)
+        print(f'EBG: {error}', file=sys.stderr)
         return 1
 
 

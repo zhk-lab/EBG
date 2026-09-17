@@ -1,6 +1,6 @@
-"""Harness-only adaptation of BEG's matching rules; no BEG module mutation.
+"""Harness-only adaptation of EBG's matching rules; no EBG module mutation.
 
-BEG's private matchers are reused here behind one compatibility boundary.
+EBG's private matchers are reused here behind one compatibility boundary.
 Codex payload handling and exclusion of navigation fallbacks stay local.
 """
 
@@ -11,8 +11,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from ..beg.behavior_atomization import _trace_demand_spans, _trace_signal, _trace_tool_operation
-from ..beg.behavior_directory import (
+from ..ebg.behavior_atomization import _trace_demand_spans, _trace_signal, _trace_tool_operation
+from ..ebg.behavior_directory import (
     _CALL_NAME, _IDENTIFIER, _PYTHON_KEYWORDS, _document_code_terms,
     _literal_pattern, _qualified_symbol_aliases,
 )
@@ -26,7 +26,7 @@ def demand_spans(content: str) -> list[tuple[int, int]]:
 
 
 def trace_signal(content: str, *, tool_name: str | None = None) -> dict[str, list[str]]:
-    # Preserve the original in storage; only BEG's input representation is adapted.
+    # Preserve the original in storage; only EBG's input representation is adapted.
     name = "Edit" if tool_name and tool_name.rsplit("__", 1)[-1] == "apply_patch" else tool_name
     locator = {"event_type": "tool_exchange" if name else "user_prompt", "tool_name": name}
     invocation = content.split("\n\nTool result:", 1)[0]
