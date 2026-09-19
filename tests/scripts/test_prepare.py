@@ -159,10 +159,17 @@ class EntrypointTests(unittest.TestCase):
             second = self._run("prepare", build)
             self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
             self.assertEqual(json.loads(second.stdout.splitlines()[-1])["requested"], 0)
+
+            repograph = artifacts / "repographs/sg_test/repograph.json"
+            repograph.unlink()
+            resumed = self._run("prepare", build)
+            self.assertEqual(resumed.returncode, 0, resumed.stderr + resumed.stdout)
+            self.assertEqual(json.loads(resumed.stdout.splitlines()[-1])["requested"], 1)
+            self.assertTrue(repograph.is_file())
             valid = self._run("prepare", ["validate", *common])
             self.assertEqual(valid.returncode, 0, valid.stderr + valid.stdout)
 
-            for arm in ("raw", "graph"):
+            for arm in ("raw", "repograph", "graph"):
                 result = self._run("predict", [
                     "--benchmark", "specgap", "--input-id", "sg_test",
                     "--arm", arm, "--artifact-root", str(root / "evaluation"),

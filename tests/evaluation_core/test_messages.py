@@ -89,9 +89,18 @@ class PromptAssetTests(unittest.TestCase):
         self.assertNotIn("implementation evidence", prompt)
         self.assertNotIn("Context compression", prompt)
 
-    def test_all_six_allowlisted_prompts_are_non_empty(self) -> None:
-        for variant in ("EBG", "baseline"):
-            for benchmark in ("specgap", "silentswap", "feedbacktrace"):
+    def test_all_allowlisted_prompts_are_non_empty(self) -> None:
+        cases = (
+            ("EBG", "specgap"),
+            ("EBG", "silentswap"),
+            ("EBG", "feedbacktrace"),
+            ("baseline", "specgap"),
+            ("baseline", "silentswap"),
+            ("baseline", "feedbacktrace"),
+            ("RepoGraph", "specgap"),
+            ("RepoGraph", "silentswap"),
+        )
+        for variant, benchmark in cases:
                 with self.subTest(variant=variant, benchmark=benchmark):
                     prompt = load_task_prompt(variant, benchmark)
                     self.assertTrue(prompt.strip())
@@ -102,11 +111,42 @@ class PromptAssetTests(unittest.TestCase):
             "the evidence is sufficient, return finish. Check the JSON action format "
             "carefully."
         )
-        for variant in ("EBG", "baseline"):
+        for variant in ("EBG", "RepoGraph", "baseline"):
             for benchmark in ("specgap", "silentswap"):
                 with self.subTest(variant=variant, benchmark=benchmark):
                     prompt = " ".join(load_task_prompt(variant, benchmark).split())
                     self.assertTrue(prompt.endswith(ending))
+
+    def test_repograph_prompt_replaces_raw_source_contract(self) -> None:
+        for benchmark in ("specgap", "silentswap"):
+            prompt = load_task_prompt("RepoGraph", benchmark)
+            baseline = load_task_prompt("baseline", benchmark)
+            self.assertIn("INPUT AND REPOGRAPH FORMAT", prompt)
+            self.assertIn("RepoGraph `search_repo(symbol)`", prompt)
+            self.assertIn("one-hop ego graph", prompt)
+            self.assertIn("Each S Read ID", prompt)
+            self.assertNotIn("Each R Read ID", prompt)
+            self.assertEqual(
+                baseline.split("INPUT AND SOURCE FORMAT", 1)[0],
+                prompt.split("INPUT AND REPOGRAPH FORMAT", 1)[0],
+            )
+            baseline_shared = baseline.split(
+                "REVIEW WORKFLOW AND PROOF STANDARD", 1
+            )[1]
+            repograph_shared = prompt.split(
+                "REVIEW WORKFLOW AND PROOF STANDARD", 1
+            )[1].replace("`S0001`", "`R0001`")
+            self.assertEqual(baseline_shared, repograph_shared)
+        with self.assertRaises(EvaluationCoreError):
+            load_task_prompt("RepoGraph", "feedbacktrace")
+
+    def test_repograph_prompt_is_loaded_from_its_own_asset(self) -> None:
+        with ProjectTemporaryDirectory() as prompt_root:
+            baseline = prompt_root / "baseline" / "specgap.txt"
+            baseline.parent.mkdir(parents=True)
+            baseline.write_text("baseline only\n", encoding="utf-8")
+            with self.assertRaises(EvaluationCoreError):
+                load_task_prompt("RepoGraph", "specgap", prompt_root=prompt_root)
 
     def test_feedbacktrace_prompts_share_structure_and_decision_rules(self) -> None:
         headings = (
@@ -400,7 +440,7 @@ class PromptAssetTests(unittest.TestCase):
             self.assertEqual(template.system, system_prompt(DEFAULT_CONFIG))
             self.assertEqual(template.benchmark, "benchmark task only")
 
-    def test_repo_module7_selects_raw_and_graph_benchmark_prompts(self) -> None:
+    def test_repo_module7_selects_each_arm_benchmark_prompt(self) -> None:
         cases = (
             ("specgap", "3_document_after.md"),
             ("silentswap", "original_document.md"),
@@ -419,6 +459,12 @@ class PromptAssetTests(unittest.TestCase):
                     initial_index="R0001 | pkg/api.py",
                     prompt_variant="baseline",
                 )
+                repograph = config.bind_module7(
+                    PROJECT_ROOT / "schemas",
+                    **common,
+                    initial_index="S0001 | pkg/api.py::handler",
+                    prompt_variant="RepoGraph",
+                )
                 graph = config.bind_module7(
                     PROJECT_ROOT / "schemas",
                     **common,
@@ -428,6 +474,13 @@ class PromptAssetTests(unittest.TestCase):
                 self.assertIn("INPUT AND SOURCE FORMAT", raw.initial_user_prompt)
                 self.assertIn("Each R Read ID", raw.initial_user_prompt)
                 self.assertNotIn("Local Graph JSON", raw.initial_user_prompt)
+                self.assertIn(
+                    "INPUT AND REPOGRAPH FORMAT", repograph.initial_user_prompt
+                )
+                self.assertIn("Each S Read ID", repograph.initial_user_prompt)
+                self.assertIn(
+                    "S0001 | pkg/api.py::handler", repograph.initial_user_prompt
+                )
                 self.assertIn("INPUT AND GRAPH FORMAT", graph.initial_user_prompt)
                 if benchmark == "specgap":
                     self.assertRegex(graph.initial_user_prompt, r"compact (?:linear )?Local Graph")

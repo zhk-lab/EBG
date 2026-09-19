@@ -11,15 +11,16 @@ from .contracts import EvaluationCoreError
 
 
 PROMPT_ROOT = Path(__file__).resolve().parents[2] / "prompts"
-PromptVariant = Literal["EBG", "baseline"]
+PromptVariant = Literal["EBG", "RepoGraph", "baseline"]
 Benchmark = Literal["specgap", "silentswap", "feedbacktrace"]
 
 _PROMPT_FILES: dict[tuple[str, str], Path] = {
     (variant, benchmark): Path(variant) / f"{benchmark}.txt"
-    for variant in ("EBG", "baseline")
+    for variant in ("EBG", "RepoGraph", "baseline")
     for benchmark in ("specgap", "silentswap", "feedbacktrace")
 }
 _PROMPT_FILES[("EBG", "silentswap")] = Path("EBG/silentswap1.txt")
+_PROMPT_FILES.pop(("RepoGraph", "feedbacktrace"))
 
 def load_task_prompt(
     variant: PromptVariant,

@@ -271,7 +271,7 @@ class BatchPredictionTests(unittest.TestCase):
                 (config.output_root / "manifest.json").read_text(encoding="utf-8")
             )
 
-            self.assertEqual(manifest["schema_version"], 4)
+            self.assertEqual(manifest["schema_version"], 6)
             self.assertEqual(manifest["specgap_retry_policy"], {
                 "format_repairs_per_attempt": 2,
                 "deferred_prediction_failure_reruns": 1,
@@ -279,7 +279,15 @@ class BatchPredictionTests(unittest.TestCase):
             })
             self.assertEqual(
                 manifest["prompt_variants"],
-                {"raw": "baseline", "graph": "EBG"},
+                {
+                    "raw": "baseline",
+                    "graph": "EBG",
+                    "repograph": "RepoGraph",
+                },
+            )
+            self.assertEqual(
+                manifest["max_read_ids"],
+                {"raw": 6, "graph": 6, "repograph": 32},
             )
             self.assertEqual(
                 manifest["prediction_requests"]["specgap"],

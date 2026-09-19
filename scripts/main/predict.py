@@ -22,6 +22,7 @@ from agentloop import (
     DEFAULT_CONFIG as AGENTLOOP_CONFIG,
     OpenAICompatibleJsonClient,
     RawBackend,
+    RepoGraphBackend,
     RunStore,
     prepare_initial_request,
 )
@@ -68,6 +69,8 @@ def _run(
     store = RunStore(args.output)
 
     if args.benchmark == "feedbacktrace":
+        if args.arm == "repograph":
+            raise AgentLoopError("RepoGraph is not defined for FeedbackTrace")
         if args.arm == "graph":
             graph = _load_graph(artifact_root, args.input_id)
             view = (trace_renderer or render_trace_view)(graph)
@@ -144,10 +147,27 @@ def _run(
         loop_config = replace(loop_config, tool_result_budget=tool_result_budget)
     benchmark_config.validate_for(bundle.benchmark)
     count_directory_tokens = token_counter(DIRECTORY_ENCODING)
-    prompt_variant = "baseline" if args.arm == "raw" else "EBG"
+    prompt_variant = {
+        "raw": "baseline",
+        "repograph": "RepoGraph",
+        "graph": "EBG",
+    }[args.arm]
+    if args.arm == "repograph":
+        loop_config = replace(
+            loop_config,
+            max_read_ids=REPOGRAPH_MAX_READ_IDS,
+        )
     if args.arm == "raw":
         backend = RawBackend(
             bundle,
+            index_budget=AGENTLOOP_CONFIG.index_budget,
+            count_tokens=count_directory_tokens,
+        )
+    elif args.arm == "repograph":
+        graph = _load_repograph(artifact_root, args.input_id)
+        backend = RepoGraphBackend(
+            bundle,
+            graph,
             index_budget=AGENTLOOP_CONFIG.index_budget,
             count_tokens=count_directory_tokens,
         )
@@ -264,6 +284,12 @@ def _load_graph(artifact_root: Path, input_id: str) -> dict[str, Any]:
     )
 
 
+def _load_repograph(artifact_root: Path, input_id: str) -> dict[str, Any]:
+    return _load_json(
+        artifact_root / "repographs" / input_id / "repograph.json"
+    )
+
+
 def _load_raw_trace_payload(
     artifact_root: Path, input_id: str
 ) -> dict[str, Any]:
@@ -292,11 +318,13 @@ run_sample = _run
 
 BENCHMARKS = ("specgap", "silentswap", "feedbacktrace")
 
-ARMS = ("graph", "raw")
+ARMS = ("graph", "raw", "repograph")
+
+REPOGRAPH_MAX_READ_IDS = 32
 
 PHASES = ("development", "formal", "full")
 
-MANIFEST_VERSION = 4
+MANIFEST_VERSION = 6
 
 FORMAT_FAILURES = {"finish_format_retries_exhausted", "action_format_retries_exhausted"}
 RETRY_BENCHMARKS = ("specgap", "silentswap")
@@ -335,6 +363,14 @@ class BatchConfig:
             raise BatchExperimentError(f"unsupported phase: {self.phase}")
         _validate_choices(self.benchmarks, BENCHMARKS, "benchmarks")
         _validate_choices(self.arms, ARMS, "arms")
+        if not any(
+            _arm_supports_benchmark(arm, benchmark)
+            for benchmark in self.benchmarks
+            for arm in self.arms
+        ):
+            raise BatchExperimentError(
+                "selected arms do not support any selected benchmark"
+            )
         if not self.model.strip() or not self.base_url.startswith(("http://", "https://")):
             raise BatchExperimentError("model and an HTTP(S) base_url are required")
         if self.workers <= 0:
@@ -629,8 +665,14 @@ def _jobs(config: BatchConfig, split: dict[str, Any]) -> list[tuple[str, str, st
     for benchmark in config.benchmarks:
         ids = split["benchmarks"][benchmark][config.phase]
         for arm in config.arms:
+            if not _arm_supports_benchmark(arm, benchmark):
+                continue
             jobs.extend((benchmark, arm, input_id) for input_id in ids)
     return jobs
+
+
+def _arm_supports_benchmark(arm: str, benchmark: str) -> bool:
+    return arm != "repograph" or benchmark in {"specgap", "silentswap"}
 
 
 def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any]:
@@ -654,7 +696,16 @@ def _build_manifest(config: BatchConfig, split: dict[str, Any]) -> dict[str, Any
             for benchmark in config.benchmarks
         },
         "artifact_root": str(config.artifact_root.resolve()),
-        "prompt_variants": {"raw": "baseline", "graph": "EBG"},
+        "prompt_variants": {
+            "raw": "baseline",
+            "graph": "EBG",
+            "repograph": "RepoGraph",
+        },
+        "max_read_ids": {
+            "raw": AGENTLOOP_CONFIG.max_read_ids,
+            "graph": AGENTLOOP_CONFIG.max_read_ids,
+            "repograph": REPOGRAPH_MAX_READ_IDS,
+        },
         "api_key_env": config.api_key_env,
         "timeout": config.timeout,
         "workers": config.workers,

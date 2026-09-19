@@ -422,6 +422,33 @@ def _judge_with_retry_policy(
             failure_class="content_validation",
             error=error,
         )
+        if config.format_repairs:
+            repair_messages = _content_repair_messages(messages, content, error)
+            repaired_content, repaired_path, repair_resumed = _call_judge_stage(
+                config,
+                stage="content_repair_1",
+                messages=repair_messages,
+                sample_root=sample_root,
+                client_factory=client_factory,
+            )
+            try:
+                repaired_response = _json_object(repaired_content)
+                result = _score_response(
+                    judge, benchmark, gold, prediction, repaired_response, kwargs
+                )
+            except Exception as repair_error:
+                _mark_attempt(
+                    repaired_path,
+                    status="content_invalid",
+                    failure_class="content_validation_repair_exhausted",
+                    error=repair_error,
+                )
+                raise JudgeContentValidationError(
+                    f"Judge content validation failed after repair: "
+                    f"{type(repair_error).__name__}: {repair_error}"
+                ) from repair_error
+            _mark_attempt(repaired_path, status="valid")
+            return result, resumed or repair_resumed
         raise JudgeContentValidationError(
             f"Judge content validation failed: {type(error).__name__}: {error}"
         ) from error
@@ -526,6 +553,27 @@ def _format_repair_messages(
                 "Return the same judgment as one JSON object that follows the "
                 "required schema. Do not add evidence, change scores or revise "
                 "the substantive judgment. Output JSON only."
+            ),
+        },
+    ]
+
+
+def _content_repair_messages(
+    messages: list[dict[str, str]], content: str, error: Exception
+) -> list[dict[str, str]]:
+    return [
+        *messages,
+        {"role": "assistant", "content": content},
+        {
+            "role": "user",
+            "content": (
+                "[[JUDGMENT CONTENT REPAIR]]\n"
+                "Your judgment was valid JSON but failed semantic validation. "
+                "Repair only the alignment structure and return one JSON object. "
+                "Use each candidate and condition at most once, keep the same "
+                "substantive scores and findings, and preserve all required arrays. "
+                f"Validation error: {type(error).__name__}: {error}\n"
+                "Output JSON only."
             ),
         },
     ]

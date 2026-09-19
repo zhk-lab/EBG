@@ -37,7 +37,7 @@ evaluation/*/artifacts/
 experiments/**/runs/
 experiments/**/judges/
 analysis_experiment
-experiments/
+main_experiments
 # Editors and operating systems
 .vscode/
 .idea/

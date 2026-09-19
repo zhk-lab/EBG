@@ -201,9 +201,13 @@ def _chat_url(base_url: str) -> str:
 
 
 def _canonical_model_id(model: str) -> str:
-    """Compare provider aliases while ignoring punctuation-only rewrites."""
+    """Normalize punctuation and the observed DeepSeek Flash response alias."""
 
-    return re.sub(r"[^a-z0-9]+", "", model.casefold())
+    normalized = re.sub(r"[^a-z0-9]+", "", model.casefold())
+    # Requests for deepseek-v4-flash return deepseek-flash in response metadata.
+    if normalized == "deepseekflash":
+        return "deepseekv4flash"
+    return normalized
 
 
 def validated_model_profile(client: ModelClient) -> dict[str, Any]:

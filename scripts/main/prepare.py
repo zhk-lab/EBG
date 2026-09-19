@@ -24,6 +24,7 @@ from agentloop.context import FastTokenCounter
 from agentloop.evidence import render_tool_result
 from agentloop.graph_backend import GraphBackend
 from agentloop.raw_backend import RawBackend
+from agentloop.repograph_backend import RepoGraphBackend
 from ebg.behavior_atomization import build_behaviors, validate_behaviors
 from ebg.behavior_directory import (
     DIRECTORY_ENCODING,
@@ -37,6 +38,12 @@ from ebg.graph_assembly import build_graph, validate_graph
 from ebg.local_graph_retrieval import LocalGraphRetriever
 from ebg.relation_linking import build_edges, validate_edges
 from jsonschema import Draft202012Validator
+from repograph.construction import (
+    RepoGraphError,
+    build_repograph,
+    render_symbol_directory,
+    validate_repograph,
+)
 
 
 def canonical_json_bytes(value: Any, *, pretty: bool = True) -> bytes:
@@ -106,6 +113,12 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 REPO_SCHEMA_VERSION = 3
 
 TRACE_SCHEMA_VERSION = 4
+
+REPOGRAPH_OUTPUT_FILES = (
+    "repograph.json",
+    "symbol_directory.txt",
+    "build_manifest.json",
+)
 
 OUTPUT_FILES = {
     "l3_evidence": "l3_evidence.jsonl",
@@ -180,6 +193,105 @@ def build_graph_artifacts(
         "output": str(output.resolve()),
         "changed": changed,
         "counts": counts,
+    }
+
+
+def build_repograph_artifacts(
+    bundle_root: str | Path,
+    output_root: str | Path,
+) -> dict[str, Any]:
+    """Build the independent RepoGraph baseline artifacts for one repo sample."""
+
+    bundle = load_visible_bundle(bundle_root)
+    graph = build_repograph(bundle)
+    output = Path(output_root)
+    directory = render_symbol_directory(graph)
+    counts = {
+        "definitions": len(graph["symbols"]),
+        "references": sum(node["kind"] == "ref" for node in graph["nodes"]),
+        "nodes": len(graph["nodes"]),
+        "contain_edges": sum(edge["relation"] == "contain" for edge in graph["edges"]),
+        "invoke_edges": sum(edge["relation"] == "invoke" for edge in graph["edges"]),
+        "parse_errors": len(graph["parse_errors"]),
+    }
+    manifest = {
+        "schema_version": 1,
+        "method": "RepoGraph",
+        "input_id": bundle.input_id,
+        "benchmark": bundle.benchmark,
+        "retrieval": {"strategy": "symbol_ego_graph", "hop_depth": 1},
+        "counts": counts,
+        "outputs": ["repograph.json", "symbol_directory.txt"],
+    }
+    changed: list[str] = []
+    outputs = {
+        "repograph.json": canonical_json_bytes(graph),
+        "symbol_directory.txt": directory.encode("utf-8"),
+        "build_manifest.json": canonical_json_bytes(manifest),
+    }
+    for filename, content in outputs.items():
+        if atomic_write(output / filename, content):
+            changed.append(filename)
+    validate_repograph_artifact(bundle.root, output, expected=graph)
+    return {
+        "input_id": bundle.input_id,
+        "benchmark": bundle.benchmark,
+        "output": str(output.resolve()),
+        "changed": changed,
+        "counts": counts,
+        "valid": True,
+    }
+
+
+def validate_repograph_artifact(
+    bundle_root: str | Path,
+    output_root: str | Path,
+    *,
+    expected: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate cached RepoGraph output against the current visible bundle."""
+
+    bundle = load_visible_bundle(bundle_root)
+    output = Path(output_root)
+    missing = [name for name in REPOGRAPH_OUTPUT_FILES if not (output / name).is_file()]
+    if missing:
+        raise RepoGraphError(f"missing generated RepoGraph artifact: {missing[0]}")
+    graph = load_json(output / "repograph.json")
+    manifest = load_json(output / "build_manifest.json")
+    if not isinstance(graph, dict) or not isinstance(manifest, dict):
+        raise RepoGraphError("RepoGraph artifacts must contain JSON objects")
+    current = expected if expected is not None else build_repograph(bundle)
+    if graph != current:
+        raise RepoGraphError("repograph.json does not match the current visible input")
+    validate_repograph(bundle, graph)
+    expected_directory = render_symbol_directory(graph).encode("utf-8")
+    if (output / "symbol_directory.txt").read_bytes() != expected_directory:
+        raise RepoGraphError("symbol_directory.txt does not match repograph.json")
+    counts = {
+        "definitions": len(graph["symbols"]),
+        "references": sum(node["kind"] == "ref" for node in graph["nodes"]),
+        "nodes": len(graph["nodes"]),
+        "contain_edges": sum(edge["relation"] == "contain" for edge in graph["edges"]),
+        "invoke_edges": sum(edge["relation"] == "invoke" for edge in graph["edges"]),
+        "parse_errors": len(graph["parse_errors"]),
+    }
+    expected_manifest = {
+        "schema_version": 1,
+        "method": "RepoGraph",
+        "input_id": bundle.input_id,
+        "benchmark": bundle.benchmark,
+        "retrieval": {"strategy": "symbol_ego_graph", "hop_depth": 1},
+        "counts": counts,
+        "outputs": ["repograph.json", "symbol_directory.txt"],
+    }
+    if manifest != expected_manifest:
+        raise RepoGraphError("RepoGraph build manifest is invalid")
+    return {
+        "input_id": bundle.input_id,
+        "benchmark": bundle.benchmark,
+        "definitions": counts["definitions"],
+        "edges": counts["contain_edges"] + counts["invoke_edges"],
+        "valid": True,
     }
 
 
@@ -391,13 +503,15 @@ def validate_repo_backends(
     visible_bundle_root: Path,
     *,
     arm: str,
+    repograph_root: Path | None = None,
 ) -> dict[str, int | float]:
     counter = FastTokenCounter(DEFAULT_CONFIG.token_estimator)
     samples = 0
     listed_units = 0
     oversize_units = 0
     read_token_counts: list[int] = []
-    for graph_dir in sorted(path for path in graph_root.iterdir() if path.is_dir()):
+    source_root = repograph_root if arm == "repograph" and repograph_root else graph_root
+    for graph_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
         input_id = graph_dir.name
         bundle = load_visible_bundle(visible_bundle_root / input_id)
         if arm == "graph":
@@ -412,6 +526,15 @@ def validate_repo_backends(
                 count_tokens=counter.count_text,
             )
             ids = sorted(backend.initial_ids)
+        elif arm == "repograph":
+            repograph = load_json(graph_dir / "repograph.json")
+            backend = RepoGraphBackend(
+                bundle,
+                repograph,
+                index_budget=DEFAULT_CONFIG.index_budget,
+                count_tokens=counter.count_text,
+            )
+            ids = sorted(str(symbol["read_id"]) for symbol in repograph["symbols"])
         else:
             backend = RawBackend(
                 bundle,
@@ -511,26 +634,33 @@ def validate_local_graph_sample(
     return totals
 
 
-def _build_one(task: tuple[str, str, str | None]) -> dict[str, Any]:
-    bundle, graph_output, directory_output = task
+def _build_one(task: tuple[str, str, str | None, str | None]) -> dict[str, Any]:
+    bundle, graph_output, directory_output, repograph_output = task
     graph = build_graph_artifacts(bundle, graph_output)
     directory_changed: list[str] = []
+    repograph_changed: list[str] = []
     if directory_output is not None:
         directory = build_directory_artifact(bundle, graph_output, directory_output)
         directory_changed = directory["changed"]
+    if repograph_output is not None:
+        repograph = build_repograph_artifacts(bundle, repograph_output)
+        repograph_changed = repograph["changed"]
     return {
         "input_id": graph["input_id"],
         "benchmark": graph["benchmark"],
         "graph_changed": graph["changed"],
         "directory_changed": directory_changed,
+        "repograph_changed": repograph_changed,
     }
 
 
-def _validate_one(task: tuple[str, str, str | None]) -> dict[str, Any]:
-    bundle, graph_output, directory_output = task
+def _validate_one(task: tuple[str, str, str | None, str | None]) -> dict[str, Any]:
+    bundle, graph_output, directory_output, repograph_output = task
     graph = validate_output(bundle, graph_output)
     if directory_output is not None:
         validate_directory_artifact(bundle, graph_output, directory_output)
+    if repograph_output is not None:
+        validate_repograph_artifact(bundle, repograph_output)
     return graph
 
 
@@ -557,6 +687,26 @@ def _save_checkpoint(path: Path | None, completed: set[str]) -> None:
     )
 
 
+def _all_build_outputs_exist(
+    artifact_root: Path,
+    input_id: str,
+    benchmark: str,
+) -> bool:
+    """Keep checkpoints resumable when a newer method adds required artifacts."""
+
+    graph_root = artifact_root / "behavior_graphs" / input_id
+    graph_files = [*OUTPUT_FILES.values(), "build_manifest.json"]
+    if benchmark != "feedbacktrace":
+        graph_files.append("task_document.md")
+    required = [graph_root / name for name in graph_files]
+    if benchmark != "feedbacktrace":
+        directory_root = artifact_root / "behavior_directories" / input_id
+        required.extend(directory_root / name for name in (JSON_OUTPUT, TEXT_OUTPUT))
+        repograph_root = artifact_root / "repographs" / input_id
+        required.extend(repograph_root / name for name in REPOGRAPH_OUTPUT_FILES)
+    return all(path.is_file() for path in required)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build or validate main experiment artifacts.")
     parser.add_argument("command", choices=("build", "validate"))
@@ -579,7 +729,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     benchmarks = args.benchmark or ["specgap", "silentswap", "feedbacktrace"]
     completed = _load_checkpoint(args.checkpoint)
-    tasks: list[tuple[str, str, str | None]] = []
+    tasks: list[tuple[str, str, str | None, str | None]] = []
     for benchmark in benchmarks:
         artifact_root = args.evaluation_root / benchmark / "artifacts"
         visible_root = artifact_root / "visible_bundles"
@@ -589,8 +739,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.input_id and bundle.name != args.input_id:
                 continue
             key = f"{benchmark}/{bundle.name}"
-            if key in completed:
+            if key in completed and _all_build_outputs_exist(
+                artifact_root, bundle.name, benchmark
+            ):
                 continue
+            completed.discard(key)
             tasks.append(
                 (
                     str(bundle),
@@ -603,6 +756,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                             / "behavior_directories"
                             / bundle.name
                         )
+                    ),
+                    (
+                        None
+                        if benchmark == "feedbacktrace"
+                        else str(artifact_root / "repographs" / bundle.name)
                     ),
                 )
             )

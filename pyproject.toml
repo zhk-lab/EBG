@@ -17,6 +17,8 @@ where = ["src", "."]
 include = [
   "ebg",
   "ebg.*",
+  "repograph",
+  "repograph.*",
   "evaluation_core",
   "evaluation_core.*",
   "agentloop",

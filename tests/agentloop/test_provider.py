@@ -159,6 +159,38 @@ class ProviderTests(unittest.TestCase):
         result = client.complete([], max_output_tokens=10)
         self.assertEqual(result.content, '{"action":"finish","prediction":{}}')
 
+    def test_provider_accepts_deepseek_flash_response_alias(self) -> None:
+        captured: dict = {}
+
+        def opener(request, *, timeout):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            return FakeResponse({**completion(), "model": "deepseek-flash"})
+
+        client = OpenAICompatibleJsonClient(
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model="deepseek-v4-flash",
+            opener=opener,
+        )
+        result = client.complete([], max_output_tokens=10)
+        self.assertEqual(result.content, completion()["choices"][0]["message"]["content"])
+        self.assertEqual(captured["model"], "deepseek-v4-flash")
+        self.assertEqual(client.profile["model"], "deepseek-v4-flash")
+
+    def test_flash_alias_does_not_accept_other_models(self) -> None:
+        for returned_model in ("deepseek-pro", "deepseek-v4-pro", "deepseek-v3-flash"):
+            with self.subTest(returned_model=returned_model):
+                client = OpenAICompatibleJsonClient(
+                    base_url="https://example.com/v1",
+                    api_key="secret",
+                    model="deepseek-v4-flash",
+                    opener=lambda request, timeout: FakeResponse(
+                        {**completion(), "model": returned_model}
+                    ),
+                )
+                with self.assertRaises(AgentLoopError):
+                    client.complete([], max_output_tokens=10)
+
     def test_provider_rejects_a_different_returned_model(self) -> None:
         client = OpenAICompatibleJsonClient(
             base_url="https://example.com/v1",

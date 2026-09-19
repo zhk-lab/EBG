@@ -160,6 +160,7 @@ class RepoBenchmarkConfig:
             ),
             "task_prompts": {
                 "raw": f"prompts/baseline/{self.benchmark}.txt",
+                "repograph": f"prompts/RepoGraph/{self.benchmark}.txt",
                 "graph": ("prompts/EBG/silentswap1.txt" if self.benchmark == "silentswap"
                           else f"prompts/EBG/{self.benchmark}.txt"),
             },

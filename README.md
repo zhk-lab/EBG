@@ -339,62 +339,10 @@ Repo 通过搜索、读取和提交三个动作完成这一过程：搜索定位
 
 ### 6.1 AgentLoop：Repo 交互式取证
 
-AgentLoop 提供三个动作接口：`search` 搜索相关代码入口，`read` 读取证据，`finish` 提交问题判断及对应代码位置。模型获得任务文档和代码目录后，每轮选择一个动作，逐步取证直至提交。`read` 在 Raw 中返回原始文件，在 EBG 中返回任务相关的局部行为图证据。该过程模拟模型进入工作环境、查找实现并依据任务要求检查问题的取证过程。
+AgentLoop 提供三个动作接口：`search` 搜索相关代码入口，`read` 读取证据，`finish` 提交问题判断及对应代码位置。模型获得任务文档和代码目录后，每轮选择一个动作，逐步取证直至提交。`read` 在 Raw 中返回原始文件，在 RepoGraph 中返回所选 Symbol 的一跳定义/引用子图，在 EBG 中返回任务相关的局部行为图证据。该过程模拟模型进入工作环境、查找实现并依据任务要求检查问题的取证过程。
 
 ### 6.2 TraceReview：Trace 轨迹分析
 
 模型一次性读取截止点前的执行记录，对照用户要求、实际行动与结果汇报，找出需要核查的问题并指出支撑证据。Raw 提供原始轨迹，EBG 提供按任务组织的行为证据。该过程模拟对长程执行历史的回顾与检查。
 
 
-
-
-## 7. 实验配置
-
-### 7.1 比较条件
-
-同一 benchmark 的 Raw 与 EBG 使用相同样本、模型、思考参数、任务定义、轮数与输出预算、预测格式及 Judge。Prompt 仅按实际证据格式作必要说明。两组只使用允许的可见输入，不使用标准答案或截止点后的事件。
-
-### 7.2 模型与运行参数
-
-以下保留原文记录的实验配置快照，具体实验以运行记录中的生效配置为准。Baseline（`raw`）与 EBG（`graph`）共用模型、思考参数和同一 benchmark 的运行预算。
-
-**模型配置**
-
-当前被测模型：`EBG_MODEL_PROFILE=GPT_LUNA`；当前评分模型：`JUDGE_MODEL_PROFILE=QWEN`。
-
-| Profile | 模型 ID | 发给模型的思考参数 |
-|---|---|---|
-| `GPT_LUNA` | `gpt-5-6-luna` | `reasoning_effort="none"` |
-| `GPT_TERRA` | `gpt-5-6-terra` | `reasoning_effort="none"` |
-| `GPT_SOL` | `gpt-5-6-sol` | `reasoning_effort="none"` |
-| `DEEPSEEK_FLASH` | `deepseek-v4-flash` | `thinking={"type":"disabled"}` |
-| `DEEPSEEK_PRO` | `deepseek-v4-pro` | `thinking={"type":"disabled"}` |
-| `GLM` | `glm-5-2` | `thinking={"type":"disabled"}` |
-| `QWEN` | `qwen3.7-max-2026-06-08` | `enable_thinking=false` |
-| `CLAUDE` | `claude-sonnet-5` | `thinking={"type":"disabled"}` |
-| `KIMI` | `kimi-k3` | `reasoning_effort="low"` |
-
-Kimi 的 `THINKING_MODE=required` 是本地校验标记，不传给 API。当前所有 Profile 均未设置 `temperature`、`top_p`，采用服务端默认值。
-
-**AgentLoop 与 TraceReview配置**
-
-| 配置 | Repo：SpecGap / SilentSwap | Trace：FeedbackTrace |
-|---|---|---|
-| 调用方式 | 多轮 `search` / `read` / `finish` | 一次性输入完整 Raw Trace / Task Scope JSON |
-| 最大轮数，包含 finish | SpecGap 8；SilentSwap 6 | 1 次，无工具调用 |
-| 初始目录预算 | 3072 token | 不适用 |
-| search 限制 | 最多返回 12 条；查询最长 512 字符 | 不适用 |
-| 单次 read 最大 ID 数 | 6 | 不适用 |
-| EBG 每个种子的展开范围 | 全部一跳邻居，不限制边数 | 不适用 |
-| 普通工具结果 / 单个完整原子单元上限 | 32768 / 65536 token | 不适用 |
-| 每次请求输出上限 | 32768 token | 32768 token |
-| 本地上下文预算 / 安全余量 | 1000000 / 32768 token | 1000000 / 32768 token |
-| 输入硬上限（扣除输出与安全余量） | 934464 token | 934464 token |
-| 工作上下文压缩阈值 / 目标 | 131072 / 98304 token | 不压缩、不截断；超限报错 |
-| 网络重试 | 每次请求最多额外重试 2 次 | 每次请求最多额外重试 2 次 |
-| 输出格式修正 | 每次完整运行：SpecGap 最多 2 次；SilentSwap 最多 1 次 | 无 |
-| 引用校验 | 引用范围须由已读取代码覆盖；允许跨过原始源码中确认的空白行，不允许跨过未展示的代码或注释；baseline 和 EBG 共用规则 | 引用须来自输入中的证据 ID |
-
-上下文使用 `utf8_bytes_div3_v1` 估算；初始目录使用 `o200k_base` 计数。表中上下文数值是程序配置的预算，并非各模型服务端窗口的声明。
-
-Repo 达到压缩阈值或服务端拒绝上下文长度时触发压缩：清理已消费或重复的旧 search 结果、已有完整副本的重复读取内容，保留完整任务文档和唯一证据。必要时可高于压缩目标，但不能超过输入硬上限。

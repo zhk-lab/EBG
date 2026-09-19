@@ -16,6 +16,7 @@ __all__ = [
     "ModelCompletion",
     "OpenAICompatibleJsonClient",
     "RawBackend",
+    "RepoGraphBackend",
     "RunOutcome",
     "RunStore",
     "prepare_initial_request",
@@ -27,4 +28,8 @@ def __getattr__(name: str):
         from .graph_backend import GraphBackend
 
         return GraphBackend
+    if name == "RepoGraphBackend":
+        from .repograph_backend import RepoGraphBackend
+
+        return RepoGraphBackend
     raise AttributeError(name)
