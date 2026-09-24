@@ -17,7 +17,7 @@ not interchangeable with the frozen evaluation set.
 Install `huggingface_hub`, then download the pinned release (no login required):
 
 ```bash
-hf download ZhaoHongKang/AgentMonBench --repo-type dataset --revision 3bf50f6271fd2dc164c5fdabefd84d363eb088f2 --local-dir data/agentmonbench
+hf download ZhaoHongKang/AgentMonBench --repo-type dataset --revision e8c0c1c3a7d0ec7aba773c4d00062df48130c382 --local-dir data/agentmonbench
 python -m tarfile -e data/agentmonbench/specgap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/silentswap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/feedbacktrace.tar.gz data/agentmonbench

@@ -51,14 +51,38 @@ the exact released IDs.
 ### Browse in Data Studio
 
 Select `specgap`, `silentswap`, or `feedbacktrace`, then the `test` split.
-Each subset has 100 rows, one per evaluation input. Rows show the task,
-an input excerpt (up to 4,000 characters), visible-file count, and paths
-inside the corresponding archive. FeedbackTrace previews show the beginning
-of the pre-feedback trace. `preview_truncated` indicates an abbreviated input.
+Each subset has 100 rows, one per evaluation input. Documents and traces are
+complete in the preview files; the web interface may abbreviate long cells.
 
-These browsing tables do not replace the complete evaluation inputs.
-Gold annotations remain separate in the archives; `gold_path` only locates them.
-Private-dataset previews require an eligible Hugging Face plan.
+| Subset | Input columns | Gold columns (scoring references only) |
+| --- | --- | --- |
+| SpecGAP | `id`, `document`, `repository_tree` | `missing_requirements`, `evidence` |
+| SilentSwap | `id`, `document`, `repository_tree` | `semantic_changes`, `evidence` |
+| FeedbackTrace | `id`, `trace` | `verification_point`, `evidence`, `criticality` |
+
+- **SpecGAP:** `missing_requirements` lists the omitted requirements.
+  Matching condition IDs link each requirement to implementation and test
+  locations in `evidence`.
+- **SilentSwap:** `semantic_changes` combines the expected behavior, changed
+  behavior, and annotated impact. Matching change numbers link each item to
+  code locations and supporting evidence.
+- **FeedbackTrace:** `trace` preserves the chronological pre-feedback events,
+  with turn numbers, roles, tool names when available, and evidence IDs.
+  `verification_point` is the annotated decision to disclose or confirm;
+  `evidence` contains the referenced visible events; `criticality` retains the
+  original annotation label. Target user feedback is not included in the trace.
+
+All Gold columns are evaluation answers, **not monitor inputs**. They are
+extracted from the frozen annotations without generating new answers.
+Repository trees list only manifest-visible files. The code benchmarks also
+require the repository contents in the archives; the tables do not replace
+these complete inputs. The archives keep visible inputs and Gold separate.
+
+To regenerate the browsing tables from an unpacked release:
+
+```bash
+python -m scripts.export_dataset_preview --source data/prepared --output data/hf_preview_update/preview
+```
 
 ### Download complete inputs
 

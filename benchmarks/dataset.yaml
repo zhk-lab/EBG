@@ -1,7 +1,7 @@
 name: AgentMonBench
 huggingface:
   repo_id: ZhaoHongKang/AgentMonBench
-  revision: 3bf50f6271fd2dc164c5fdabefd84d363eb088f2
+  revision: e8c0c1c3a7d0ec7aba773c4d00062df48130c382
   url: https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench
   status: public
 components:
