@@ -1,0 +1,17 @@
+[
+  {
+    "benchmark": "specgap",
+    "model": "luna",
+    "sample_id": "sg_095",
+    "key_ids": [
+      "kc_001",
+      "kc_003",
+      "kc_004",
+      "kc_005",
+      "kc_007"
+    ],
+    "category": "model_judgment",
+    "source": "user_instruction",
+    "reason": "The author assigned these five unresolved targets to model-judgment failure for both judges. This adjudication does not establish verified successful execution or complete evidence coverage."
+  }
+]

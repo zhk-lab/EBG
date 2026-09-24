@@ -1,0 +1,1 @@
+Follow PLAN.md to complete this classifier configuration experiment. Run the necessary experiments, select a configuration to deliver, and briefly explain your choice. Use only the current project and the existing Python standard library. Do not access the network.

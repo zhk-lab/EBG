@@ -19,6 +19,8 @@ htmlcov/
 
 # Local scratch files
 .tmp/
+.tmp-tests/
+.validation/
 *.log
 *.tmp
 *.bak
@@ -32,12 +34,20 @@ dist/
 build/
 *.egg-info/
 
-# Generated evaluation data and detailed model traces
+# Local datasets, runs, archived drafts, and generated artifacts
+/data/
+/outputs/
 evaluation/*/artifacts/
-experiments/**/runs/
-experiments/**/judges/
-analysis_experiment
-main_experiments
+benchmarks/*/.work/
+benchmarks/*/data/
+benchmarks/*/runs/
+benchmarks/*/reports/
+benchmarks/*/feedbacktrace/
+benchmarks/*/provenance/swe_chat_source.json
+benchmarks/*/review/reviews.jsonl
+harness/.state/
+harness/case_studies/.validation/
+/iclr2027_conference.pdf
 # Editors and operating systems
 .vscode/
 .idea/

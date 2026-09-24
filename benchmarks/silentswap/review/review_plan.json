@@ -1,0 +1,41 @@
+{
+  "primary_review_sample_numbers": "1-100",
+  "double_review_seed": 20260805,
+  "double_review_sample_numbers": [
+    6,
+    8,
+    12,
+    14,
+    18,
+    19,
+    24,
+    41,
+    42,
+    44,
+    49,
+    50,
+    55,
+    64,
+    66,
+    70,
+    72,
+    77,
+    82,
+    83,
+    85,
+    92,
+    96,
+    98,
+    99
+  ],
+  "stratum_quotas": {
+    "input_validation_boundary": 3,
+    "parsing_matching": 4,
+    "ordering_precedence": 5,
+    "default_null_fallback": 3,
+    "exception_error_handling": 3,
+    "state_identity_lifecycle": 2,
+    "representation_normalization": 3,
+    "dispatch_routing_aggregation": 2
+  }
+}

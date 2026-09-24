@@ -35,7 +35,8 @@ class RealSampleSmokeTests(unittest.TestCase):
             with self.subTest(benchmark=benchmark):
                 root = (
                     PROJECT_ROOT
-                    / "evaluation"
+                    / "data"
+                    / "prepared"
                     / benchmark
                     / "artifacts"
                     / "visible_bundles"

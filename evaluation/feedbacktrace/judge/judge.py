@@ -192,7 +192,7 @@ def validate_judge_response(
     ):
         errors.append("judge_verification_point_relation_invalid")
 
-    force_false = prediction_verdict == "NO_KEY" or not evidence_ids_valid
+    force_false = prediction_verdict != "KEY" or not evidence_ids_valid
     expected_case_keys = evidence_case_response_keys(
         evidence_id_relation_value,
         force_false=force_false,
@@ -215,7 +215,7 @@ def validate_judge_response(
         ):
             errors.append("judge_non_evidence_cannot_be_direct_or_sufficient")
 
-    if prediction_verdict == "NO_KEY":
+    if prediction_verdict != "KEY":
         if relation != "different":
             errors.append("judge_forced_different_relation_invalid")
     return sorted(set(errors))
@@ -236,7 +236,7 @@ def render_judge_prompt(
         instruction = f"""### Applicable Evidence ID-set case
 
 The program computed evidence_id_relation={evidence_id_relation_value}. The
-Prediction is NO_KEY or its Evidence IDs are invalid, so the program will set
+Prediction has an invalid verdict or invalid Evidence IDs, so the program will set
 is_evidence, direct, and sufficient to false. Do not perform an Evidence
 semantic judgment. Return evidence_case_evaluation as an empty object.
 
@@ -359,7 +359,6 @@ def judge_payload(
         and len(predicted_evidence_ids) == len(set(predicted_evidence_ids))
         and (
             (predicted_verdict == "KEY" and 1 <= len(predicted_evidence_ids) <= 2)
-            or (predicted_verdict == "NO_KEY" and not predicted_evidence_ids)
         )
     )
 
@@ -421,7 +420,7 @@ def build_llm_messages(
     )
     relation = str(payload["evidence_id_relation"])
     evidence_ids_valid = bool(payload["prediction"]["evidence_ids_valid"])
-    force_false = prediction.get("verdict") == "NO_KEY" or not evidence_ids_valid
+    force_false = prediction.get("verdict") != "KEY" or not evidence_ids_valid
     rendered_prompt = render_judge_prompt(
         PROMPT_PATH.read_text(encoding="utf-8").strip(),
         evidence_id_relation_value=relation,
@@ -450,7 +449,7 @@ def validate_llm_response(
     )
     if errors:
         raise ValueError(", ".join(errors))
-    force_false = prediction_verdict == "NO_KEY" or not evidence_ids_valid
+    force_false = prediction_verdict != "KEY" or not evidence_ids_valid
     evidence_evaluation = evidence_evaluation_from_case(
         evidence_id_relation_value,
         dict(value["evidence_case_evaluation"]),

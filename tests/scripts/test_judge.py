@@ -313,11 +313,11 @@ class BatchJudgeTests(unittest.TestCase):
             self.assertEqual(sample["usage"]["calls"], 2)
             self.assertEqual(len(calls), 2)
 
-    def test_parseable_content_validation_error_is_not_retried(self) -> None:
+    def test_content_validation_error_is_not_retried_when_repairs_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = self._fixture(root, benchmarks=("specgap",))
-            config = replace(config, deferred_retries=0)
+            config = replace(config, deferred_retries=0, format_repairs=0)
             calls: list[list[dict[str, str]]] = []
             outcomes: list[object] = [{}]
 
@@ -340,7 +340,7 @@ class BatchJudgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = self._fixture(root, benchmarks=("specgap",))
-            config = replace(config, deferred_retries=0)
+            config = replace(config, deferred_retries=0, format_repairs=0)
             attempt = (
                 config.judge_root
                 / "sg_test/attempts/initial_001.json"
@@ -433,6 +433,7 @@ class BatchJudgeTests(unittest.TestCase):
                 config = replace(
                     self._fixture(Path(directory), benchmarks=("specgap", "silentswap")),
                     workers=1,
+                    format_repairs=1 if kind == "format" else 0,
                 )
                 outcomes = [*failed_outcomes, _perfect_silentswap_response(), _perfect_specgap_response()]
                 calls, events = [], []
@@ -459,7 +460,7 @@ class BatchJudgeTests(unittest.TestCase):
 
     def test_deferred_failure_is_only_retried_once_even_after_resume(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            config = self._fixture(Path(directory), benchmarks=("specgap",))
+            config = replace(self._fixture(Path(directory), benchmarks=("specgap",)), format_repairs=0)
             calls, outcomes = [], [{}, {}]
             first = run_batch_judges(
                 config, client_factory=lambda: ScriptedClient(config, calls, outcomes),
@@ -474,7 +475,7 @@ class BatchJudgeTests(unittest.TestCase):
 
     def test_interrupted_deferred_scoring_reuses_saved_response(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            config = self._fixture(Path(directory), benchmarks=("specgap",))
+            config = replace(self._fixture(Path(directory), benchmarks=("specgap",)), format_repairs=0)
             calls, outcomes = [], [{}, _perfect_specgap_response()]
             retry_result = config.judge_root / "sg_test/retry_1/result.json"
             def interrupt_after_response(path, value):
@@ -644,7 +645,7 @@ class BatchJudgeTests(unittest.TestCase):
             _write_specgap_reference(formal_root)
             module = _load_judge_module("specgap")
             module.DEFAULT_FORMAL_DATA_ROOT = formal_root
-            repository = root / "repository"
+            repository = artifacts / "specgap/artifacts/visible_bundles/sg_test/repository"
             source = repository / "pkg/api.py"
             source.parent.mkdir(parents=True)
             source.write_text("\n" * 8 + "def public():\n    return 1\n", encoding="utf-8")

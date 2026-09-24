@@ -1,0 +1,105 @@
+{
+  "timeout": 600,
+  "models": {
+    "luna": {
+      "specgap": {
+        "model": "gpt-5-6-luna",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GPT_API_KEY",
+        "request_options": {
+          "reasoning_effort": "none"
+        },
+        "source_manifest": "experiments\\EBG\\specgap\\gpt5.6\\manifest.json"
+      },
+      "silentswap": {
+        "model": "gpt-5-6-luna",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GPT_API_KEY",
+        "request_options": {
+          "reasoning_effort": "none"
+        },
+        "source_manifest": "experiments\\EBG\\silentswap\\gpt5.6\\stage1\\manifest.json"
+      }
+    },
+    "kimi-k3": {
+      "specgap": {
+        "model": "kimi-k3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "KIMI_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "experiments\\EBG\\specgap\\kimi-k3\\manifest.json"
+      },
+      "silentswap": {
+        "model": "kimi-k3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "KIMI_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "experiments\\EBG\\silentswap\\kimi-k3\\stage1\\manifest.json"
+      }
+    },
+    "glm-5-3": {
+      "specgap": {
+        "model": "glm-5-3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GLM53_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "experiments\\EBG\\specgap\\glm-5-3\\manifest.json"
+      },
+      "silentswap": {
+        "model": "glm-5-3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GLM53_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "experiments\\EBG\\silentswap\\glm-5-3\\stage1\\manifest.json"
+      }
+    }
+  },
+  "judges": {
+    "specgap": {
+      "model": "qwen3.7-max-2026-06-08",
+      "base_url": "https://your-gateway.example/v1",
+      "api_key_env": "QWEN_API_KEY",
+      "request_options": {
+        "enable_thinking": false
+      }
+    },
+    "silentswap": {
+      "model": "qwen3.7-max-2026-06-08",
+      "base_url": "https://your-gateway.example/v1",
+      "api_key_env": "QWEN_API_KEY",
+      "request_options": {
+        "enable_thinking": false
+      }
+    }
+  },
+  "profile_policy": "Reuse the existing per-benchmark model versions and request options.",
+  "expansion_hops": [
+    2,
+    3
+  ],
+  "max_rounds": {
+    "specgap": [
+      4,
+      6
+    ],
+    "silentswap": [
+      4,
+      5
+    ]
+  },
+  "defaults": {
+    "expansion_hops": 1,
+    "max_rounds": {
+      "specgap": 8,
+      "silentswap": 6
+    }
+  }
+}

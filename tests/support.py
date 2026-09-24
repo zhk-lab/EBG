@@ -18,8 +18,6 @@ class ProjectTemporaryDirectory:
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
         self._temporary.cleanup()
-        if TEMP_ROOT.is_dir() and not any(TEMP_ROOT.iterdir()):
-            TEMP_ROOT.rmdir()
 
 
 def make_repo_bundle(

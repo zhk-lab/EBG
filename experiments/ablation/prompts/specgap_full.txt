@@ -1,0 +1,124 @@
+Your task is SpecGap recovery. The TASK DOCUMENT contains the complete
+`document_after`: an otherwise largely complete task document from which 2–5
+externally meaningful implemented rules have been removed. Compare it with the
+current production implementation and report only material contracts that the document
+no longer states or clearly implies.
+
+INPUT AND GRAPH FORMAT
+
+- RUN INPUT identifies the sample. The runner adds `input_id` and `benchmark` after
+  validation; never put them inside `finish.prediction`.
+- TASK DOCUMENT is the complete current documentation baseline. It usually still names
+  the relevant API, class, function, or topic; the missing part may be one condition,
+  default, exception, ordering rule, data reference, or result. Search the whole
+  document for equivalent wording before treating a rule as missing.
+- A graph INITIAL REPOSITORY INDEX is a ranked file table. Each row contains an F Read
+  ID, repository path, related document sections, and a few code hints. Direct document
+  matches rank first, followed by one-hop graph neighbors and remaining production
+  files. Rows and hints are neutral navigation, not findings or complete behavior
+  descriptions.
+- A paired Raw view may instead list R source-file IDs. The task and proof standard are
+  unchanged.
+- Reading an F ID returns a compact linear Local Graph rooted at the smallest set of
+  document- or search-supported Root Symbols; it does not enumerate every Symbol in the
+  file. `[DIRECT ROOT]` marks source selected directly for this read. When a task
+  document match exists, the next `Doc:` line names the narrowest matching document
+  section, followed by `path::RootSymbol@lines` and the complete numbered Root source.
+  A `<module>` Root contains only the matched module-level segment.
+  `[CONTEXT via calls]` and `[CONTEXT via feeds]` mark structural neighbors, not direct
+  document matches. The relation line identifies the exact connection and is followed
+  by the numbered source selected for the neighbor. Neighbor source contains only the
+  Behavior directly supported by the edge; multiple supported Behaviors are merged in
+  file order without duplicate lines. Exact file lines already shown earlier in the
+  same result are not repeated. A jump in line numbers means unrelated lines were
+  omitted. If the edge cannot identify a Behavior, it falls back to the complete Symbol source.
+  Treat only numbered source lines as implementation evidence; relation lines and search
+  hits are navigation. Reading an R ID returns original numbered source.
+
+REVIEW WORKFLOW AND PROOF STANDARD
+
+Start with the smallest set of top-ranked files whose names and related sections most
+directly correspond to concrete document rules. Use one focused batch read. Directory
+entries are options, not a checklist, and the read limit is not a target. Review every
+returned source block before finish because one read may prove several independent
+omissions.
+
+Report only distinct, materially important omissions supported by explicit code
+evidence. There is no minimum number of findings. If only one omission is supported,
+return that one; if none is supported, return an empty findings array. Do not continue
+searching merely to reach a target count or invent additional findings.
+
+For each candidate:
+
+1. Recover one exact current rule from current production source: its condition or
+   boundary, operation, and observable result. Check defaults, null/empty handling,
+   exceptions, ordering, state and fallback rules, data references, dependency
+   selection, integration behavior, and evaluation boundaries when present.
+2. Compare that rule with the complete TASK DOCUMENT, not only the nearby section.
+   Paraphrases and rules clearly entailed by the document are already covered.
+3. Keep it only when misunderstanding the omitted rule could materially change public
+   use, output, compatibility, integration, evaluation, or a success claim.
+4. Follow related files only as far as needed to complete the same rule. Use search only
+   when the visible directory and already named related files do not expose the
+   responsible code.
+5. Merge branches or locations that prove the same condition-to-result contract. Keep
+   rules separate when they require different verification questions, even if they
+   share a function.
+
+Reject documented or clearly implied rules, private implementation preferences without
+material external effect, vague possibilities without a concrete implementation, and
+claims supported only by directory rows, search hits, Behavior labels, or edges. Do not
+invent findings, duplicate the same rule, or split one rule to increase the count.
+Evidence quality, not the number of findings, determines what to report.
+
+OUTPUT CONTRACT
+
+Use exactly this object inside the finish action:
+
+```json
+{
+  "findings": [
+    {
+      "finding_id": "F001",
+      "claim": "one atomic implemented contract missing from the document",
+      "verification_question": "one concrete question that resolves this contract",
+      "why_important": "why this omission matters in practice",
+      "downstream_impact": "what behavior or decision can change",
+      "code_evidence": [
+        {
+          "path": "exact/repository/path.py",
+          "start_line": 10,
+          "end_line": 14,
+          "symbol": "Exact.enclosing_symbol",
+          "explanation": "what these lines directly establish"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Do not add fields outside this shape.
+
+- `findings`: zero or more distinct, evidence-supported material omissions, ordered
+  by importance and confidence. Return only the findings supported by the evidence.
+- `finding_id`: a unique answer-local ID such as `F001`; it is unrelated to a
+  repository Read ID such as `F0001`.
+- `claim`: one precise missing rule, preferably condition -> result when applicable.
+- `verification_question`: one user-answerable question about that same rule.
+- `why_important`: why the missing specification matters in practice.
+- `downstream_impact`: the concrete behavior, integration, evaluation, or decision that
+  could change.
+- `code_evidence`: direct production locations returned by read. Use the exact path,
+  owning Symbol, and smallest inclusive lines that prove the claim. Use separate entries
+  for necessary non-contiguous or cross-Symbol ranges.
+
+FINAL CHECK
+
+Before finish, verify that every finding is materially external, absent from the complete
+TASK DOCUMENT, non-duplicate, and supported by literal source returned by read. Compare
+the claimed current behavior with the exact displayed lines: it must paraphrase what the
+code actually does, not a plausible implementation it could have used. SpecGap is not
+an implementation-bug or general code/document-conflict task. Each round must return
+exactly one action. When you have the answer and the evidence is sufficient, return
+finish. Check the JSON action format carefully.

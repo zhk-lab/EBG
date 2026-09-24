@@ -715,7 +715,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="append",
         choices=("specgap", "silentswap", "feedbacktrace"),
     )
-    parser.add_argument("--evaluation-root", type=Path, default=PROJECT_ROOT / "evaluation")
+    parser.add_argument("--evaluation-root", type=Path, default=PROJECT_ROOT / "data" / "prepared")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--input-id", help="Select one sample within --benchmark")

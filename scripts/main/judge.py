@@ -104,7 +104,7 @@ class JudgeBatchConfig:
     network_retries: int = DEFAULT_NETWORK_RETRIES
     format_repairs: int = DEFAULT_FORMAT_REPAIRS
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
-    artifact_root: Path = PROJECT_ROOT / "evaluation"
+    artifact_root: Path = PROJECT_ROOT / "data" / "prepared"
     request_options: dict[str, Any] | None = None
     deferred_retries: int = 1
 
@@ -1035,7 +1035,10 @@ def _judge_kwargs(
         / "documents"
         / "3_document_after.md"
     )
-    return {"document_after": path.read_text(encoding="utf-8")}
+    return {
+        "document_after": path.read_text(encoding="utf-8"),
+        "repository_root": path.parent.parent / "repository",
+    }
 
 
 def _normalize_gold(benchmark: str, gold: dict[str, Any]) -> dict[str, Any]:
@@ -1245,7 +1248,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--experiment-root",
         type=Path,
-        default=PROJECT_ROOT / "experiments",
+        default=PROJECT_ROOT / "outputs" / "experiments",
     )
     parser.add_argument("--phase", default="full", choices=PHASES)
     parser.add_argument("--benchmark", action="append", choices=BENCHMARKS)
@@ -1263,7 +1266,7 @@ def _parser() -> argparse.ArgumentParser:
         "--max-output-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS
     )
     parser.add_argument(
-        "--artifact-root", type=Path, default=PROJECT_ROOT / "evaluation"
+        "--artifact-root", type=Path, default=PROJECT_ROOT / "data" / "prepared"
     )
     return parser
 

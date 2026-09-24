@@ -1,0 +1,36 @@
+{
+  "models": [
+    "luna",
+    "glm-5-3"
+  ],
+  "comparisons": [
+    {
+      "experiment": "max_rounds",
+      "value": 4,
+      "benchmark": "specgap",
+      "baseline": "raw_h1_r4",
+      "EBG": "graph_h1_r4"
+    },
+    {
+      "experiment": "max_rounds",
+      "value": 6,
+      "benchmark": "specgap",
+      "baseline": "raw_h1_r6",
+      "EBG": "graph_h1_r6"
+    },
+    {
+      "experiment": "max_rounds",
+      "value": 4,
+      "benchmark": "silentswap",
+      "baseline": "raw_h1_r4",
+      "EBG": "graph_h1_r4"
+    },
+    {
+      "experiment": "max_rounds",
+      "value": 5,
+      "benchmark": "silentswap",
+      "baseline": "raw_h1_r5",
+      "EBG": "graph_h1_r5"
+    }
+  ]
+}

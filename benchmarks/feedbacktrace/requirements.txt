@@ -1,0 +1,5 @@
+duckdb==1.5.4
+httpx==0.28.1
+jsonschema==4.23.0
+openai==2.21.0
+python-dotenv==1.2.1

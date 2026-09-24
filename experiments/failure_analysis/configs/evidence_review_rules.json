@@ -1,0 +1,68 @@
+{
+  "sg_078/kc_001": {
+    "exclude": {
+      "atest/HybridLibrary.py": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    "reason": "src/robotlibcore.py:71-72 registers components before self, and :89-94 overwrites by published keyword name. This directly establishes main-library precedence; the acceptance-test fixture is redundant."
+  },
+  "sg_014/kc_001": {
+    "exclude": {
+      "click_option_group/_core.py": [
+        29
+      ]
+    },
+    "reason": "FC is a type alias, not the runtime dispatch. get_callback_and_params at _helpers.py:15-28 explicitly handles click.Command versus plain callable; retain the remaining implementation evidence requirements."
+  },
+  "sg_036/kc_001": {
+    "exclude": {
+      "requests_credssp/exceptions.py": [
+        27,
+        28,
+        29
+      ]
+    },
+    "reason": "The empty InvalidConfigurationException class declaration adds no validation behavior; the constructor's allowed values, normalization and exact raise statement are the necessary implementation evidence."
+  },
+  "sg_036/kc_004": {
+    "exclude": {
+      "requests_credssp/exceptions.py": [
+        22,
+        23,
+        24
+      ]
+    },
+    "reason": "The empty AuthenticationException declaration is redundant to the visible exact raise statement; retain the protocol-version calculation and comparison requirements."
+  },
+  "sg_040/kc_002": {
+    "exclude": {
+      "dacite/exceptions.py": [
+        73
+      ]
+    },
+    "reason": "The UnexpectedDataError class header alone does not establish strict-mode behavior; the strict check and raise site establish it. All other Gold implementation locations remain required."
+  },
+  "sg_040/kc_004": {
+    "exclude": {
+      "dacite/exceptions.py": [
+        25
+      ]
+    },
+    "reason": "The WrongTypeError class header is not needed to determine whether is_instance returns False rather than raising it; retain the referenced function body."
+  },
+  "sg_025/kc_006": {
+    "exclude": {
+      "src/objprint/objprint.py": [
+        25
+      ]
+    },
+    "reason": "objstr at lines 128-134 explicitly inserts color=False when absent before merging configuration. The global color default does not change that behavior."
+  }
+}

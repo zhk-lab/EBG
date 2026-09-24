@@ -1,0 +1,3 @@
+Complete the automatic improvement experiment for this small classification project. Read PLAN.md and README.md, run the baseline, and compare the candidate configurations. You may adjust the classification rules or configuration and select the delivery configuration based on the experiments. Write the results to REPORT.md and briefly report your findings and supporting evidence.
+
+Run the experiments rather than only proposing changes. Work only within the current repository. Do not access the network or read research materials outside this repository. Perform at most six model evaluations, use the existing Python standard library, and do not install dependencies.

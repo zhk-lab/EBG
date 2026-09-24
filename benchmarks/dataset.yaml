@@ -1,0 +1,14 @@
+name: AgentMonBench
+huggingface:
+  repo_id: null
+  revision: null
+  url: null
+components:
+  specgap:
+    examples: 100
+  silentswap:
+    examples: 100
+  feedbacktrace:
+    examples: 100
+    verdict: KEY
+    track: long

@@ -87,15 +87,6 @@ class FakeClient:
 
 
 class FeedbackTraceJudgeTests(unittest.TestCase):
-    def test_prompt_is_the_exact_latest_formal_asset(self) -> None:
-        official = (
-            Path.home()
-            / "Desktop"
-            / "FeedbackTrace"
-            / "prompts"
-            / "feedbacktrace_judge.txt"
-        )
-        self.assertEqual(JUDGE.PROMPT_PATH.read_bytes(), official.read_bytes())
 
     def test_payload_contains_only_selected_evidence_fields(self) -> None:
         payload = JUDGE.judge_payload(
@@ -169,14 +160,14 @@ class FeedbackTraceJudgeTests(unittest.TestCase):
         self.assertEqual(result["verification_point_alignment"], 0.5)
         self.assertEqual(result["evidence_location_score"], 0.5)
 
-    def test_no_key_forces_different_and_false_evidence(self) -> None:
+    def test_invalid_verdict_forces_different_and_false_evidence(self) -> None:
         client = FakeClient({
             "verification_point_relation": "different",
             "evidence_case_evaluation": {},
         })
         result = JUDGE.judge_prediction(
             _gold(),
-            _prediction(verdict="NO_KEY"),
+            _prediction(verdict="INVALID"),
             client,
             model_input=_model_input(),
         )
@@ -194,7 +185,7 @@ class FeedbackTraceJudgeTests(unittest.TestCase):
             ValueError, "semantic Judge accepts only Gold KEY samples"
         ):
             JUDGE.judge_prediction(
-                _gold(verdict="NO_KEY"),
+                _gold(verdict="INVALID"),
                 _prediction(),
                 client,
                 model_input=_model_input(),

@@ -43,7 +43,7 @@ from scripts.model_config import (
     apply_model_settings,
     public_settings,
 )
-from analysis_experiment.performance_vs_input_size.scripts.tracereview import (
+from tracereview import (
     DEFAULT_CONFIG as TRACE_REVIEW_CONFIG,
     TraceReview,
     prepare_trace_request,
@@ -64,7 +64,7 @@ def _run(
     artifact_root = (
         Path(args.artifact_root)
         if args.artifact_root
-        else PROJECT_ROOT / "evaluation" / args.benchmark / "artifacts"
+        else PROJECT_ROOT / "data" / "prepared" / args.benchmark / "artifacts"
     )
     store = RunStore(args.output)
 
@@ -350,7 +350,7 @@ class BatchConfig:
     prepare_only: bool = False
     schema_root: Path = PROJECT_ROOT / "schemas"
     request_options: dict[str, Any] | None = None
-    artifact_root: Path = PROJECT_ROOT / "evaluation"
+    artifact_root: Path = PROJECT_ROOT / "data" / "prepared"
 
     @property
     def output_root(self) -> Path:
@@ -921,7 +921,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--experiment-root",
         type=Path,
-        default=PROJECT_ROOT / "experiments",
+        default=PROJECT_ROOT / "outputs" / "experiments",
     )
     parser.add_argument(
         "--split-file",
@@ -935,7 +935,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--schema-root", type=Path, default=PROJECT_ROOT / "schemas")
-    parser.add_argument("--artifact-root", type=Path, default=PROJECT_ROOT / "evaluation")
+    parser.add_argument("--artifact-root", type=Path, default=PROJECT_ROOT / "data" / "prepared")
     parser.add_argument("--prepare-only", action="store_true")
     return parser
 

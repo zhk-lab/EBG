@@ -148,7 +148,7 @@ class PromptAssetTests(unittest.TestCase):
             with self.assertRaises(EvaluationCoreError):
                 load_task_prompt("RepoGraph", "specgap", prompt_root=prompt_root)
 
-    def test_feedbacktrace_prompts_share_structure_and_decision_rules(self) -> None:
+    def test_feedbacktrace_prompts_preserve_their_input_and_evidence_rules(self) -> None:
         headings = (
             "ROLE AND OBJECTIVE",
             "INPUT FORMAT",
@@ -177,18 +177,19 @@ class PromptAssetTests(unittest.TestCase):
 
         baseline = sections(prompts["baseline"])
         graph = sections(prompts["EBG"])
+        self.assertIn("complete raw trace payload", baseline["INPUT FORMAT"])
+        self.assertIn("current_task_id", graph["INPUT FORMAT"])
+        self.assertIn("ONLY from", graph["HOW TO READ THE INPUT"])
+        self.assertIn("Evidence ID", baseline["INPUT FORMAT"])
         for heading in headings:
-            if heading in {"INPUT FORMAT", "HOW TO READ THE INPUT"}:
-                self.assertNotEqual(baseline[heading], graph[heading])
-            else:
-                self.assertEqual(baseline[heading], graph[heading])
+            self.assertTrue(baseline[heading])
+            self.assertTrue(graph[heading])
         for prompt in prompts.values():
             normalized = " ".join(prompt.split())
             self.assertIn("three semantic parts", normalized)
             self.assertIn("A direct decision anchor", normalized)
-            self.assertIn("A minimal direct sufficient Evidence set", normalized)
+            self.assertIn("direct sufficient Evidence set", normalized)
             self.assertIn("Every formal sample contains such a decision", normalized)
-            self.assertNotIn("NO_KEY", prompt)
             self.assertNotIn("KEY", prompt)
             self.assertNotIn('"verdict"', prompt)
             self.assertNotIn("max_output_tokens", prompt)
@@ -206,8 +207,6 @@ class PromptAssetTests(unittest.TestCase):
             "`action`",
             "`response`",
             "`relations`",
-            "`informs`",
-            "`supersedes`",
             "`content`",
         ):
             self.assertIn(term, ebg_prompt)
@@ -525,7 +524,6 @@ class PromptAssetTests(unittest.TestCase):
             " ".join(rendered.split()),
         )
         self.assertIn("DECISION SELECTION RULES", rendered)
-        self.assertNotIn("NO_KEY", rendered)
         self.assertNotIn('"verdict"', rendered)
         self.assertIn('"current_task_id":"K0001"', rendered)
         self.assertIn('"task_id":"K0001","status":"current"', rendered)

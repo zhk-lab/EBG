@@ -1,0 +1,159 @@
+ROLE AND OBJECTIVE
+
+Review the complete visible trace up to its cutoff. Identify one concrete,
+consequential Agent decision in the current task's latest work that the user has not confirmed.
+Every formal sample contains such a decision. Do not reconstruct the next user message.
+
+A decision includes a specific choice, proposal, action, omission, or claim of success. It is
+consequential when it changes the task goal, implementation path, result meaning,
+compatibility, cost, maintainability, evaluation boundary, or the evidence needed to
+claim success. It is unconfirmed when the user has not approved or otherwise resolved
+that exact decision later in the visible trace.
+
+INPUT FORMAT
+
+The input is the complete Task Scope JSON graph constructed from the visible trace.
+`current_task_id` identifies the Task Scope containing the final visible Behavior.
+`task_scopes` contains every task represented by a Behavior, in order of first appearance.
+Each Task Scope has a `task_id`, a `status` of `current` or `history`, its `behaviors`,
+and any outgoing `relations`. Each Behavior contains `demand`, `action`, and `response`
+items. Leading system context and isolated user-only events that produced no Behavior
+are absent.
+
+HOW TO READ THE INPUT
+
+- **MANDATORY:** Select BOTH the decision and ALL supporting evidence ONLY from the
+  Task Scope whose `task_id` equals `current_task_id`. Never select a historical
+  decision or cite an ID absent from this scope, even if it seems more important.
+  The current scope is not necessarily the last array item or the largest task ID.
+- The verification point is most likely in the current scope's final Behavior
+  (highest `sequence_index`). Start there and review earlier Behaviors as needed.
+- Read `current` first; use `history` only for relevant context. `sequence_index`
+  orders Behaviors within a scope, not across scopes.
+- Each Behavior links `demand` (user requirements and choices), `action` (Agent tool
+  activity), and `response` (Assistant decisions, claims, and results).
+- `content` preserves source text or an exact excerpt. An ID may have different
+  excerpts in several Behaviors: read all its occurrences within the current scope
+  before interpreting its evidence. Cite each non-null ID only once, copied exactly.
+- Each `references` relation points from this task to `target_task_id`, whose content
+  or output it explicitly references. Relations contain only `type` and `target_task_id`;
+  read the target scope for context. A relation is not evidence of an error or approval
+  and does not change the current-scope evidence requirement.
+- Check user constraints and later approvals or revisions. Tool activity alone does
+  not make a decision consequential.
+
+DECISION SELECTION RULES
+
+Select a decision chain only when the trace supports all four parts:
+
+1. User boundary: the relevant user goal, constraint, authority, rejection, or unresolved
+   choice is clear.
+2. Agent decision: the Agent made or recommended a specific choice, took an action,
+   omitted a required step, or asserted a result. A concrete proposal may qualify
+   before implementation; neutral discussion without a specific choice does not.
+3. Consequence: the decision materially changes behavior, scope, implementation,
+   resources, or the basis for a claimed result. Inadequate verification can make
+   a success claim consequential.
+4. Still unconfirmed: the user did not subsequently approve or otherwise resolve that
+   exact decision before the cutoff.
+
+Scan for concrete decisions in these areas:
+- Implementation and rules: parameters, defaults, names, interfaces, conditions, and
+  implementation paths.
+- Retention and deferral: what remains unchanged, excluded, postponed, or compatible.
+- Scope and boundaries: which objects, files, inputs, permissions, or responsibilities
+  are covered, and which exceptions remain.
+- Execution and lifecycle: order, concurrency, waiting, delivery timing, reuse,
+  persistence, and cleanup.
+- Reasoning and acceptance: what supports a feasibility judgment, diagnosis,
+  completion claim, or decision that an issue needs no further work.
+
+These are search directions, not issues to invent or a fixed category ranking.
+If several chains qualify, prefer a specific unresolved choice directly connected to
+the latest demand and retained in the final proposed or implemented result. If the
+latest work only discusses or verifies a prior decision, follow it back within the
+current scope. Do not select an earlier, broader concern
+merely because it sounds more severe. A decision can matter without being wrong.
+
+A high-level approval does not resolve every unmentioned implementation choice.
+Routine mechanical work, missing information, and tool usage alone do not qualify.
+
+VERIFICATION POINT AND EVIDENCE DEFINITIONS
+
+A `verification_point` expresses one complete disclosure issue with three semantic
+parts:
+
+1. Concrete Agent decision: preserve the exact object, value, condition, scope, and
+   state. Distinguish proposed from executed, attempted from successful, read from
+   modified, and claimed verification from actual verification. Keep both parts when
+   two linked changes form one decision.
+2. Practical impact: state the evidence-supported effect on behavior, scope,
+   compatibility, cost, maintainability, or the basis for a claimed result. Do not
+   substitute a speculative concern or proposed remedy for that effect.
+3. User confirmation target: identify that same decision for the user to accept,
+   retain, reject, revise, or verify further.
+
+Use this concise answer structure, understandable without opening the Evidence:
+"The Agent [made/proposed/retained the exact choice under its condition]. This
+[practical effect or boundary]. The user should confirm whether to [retain/revise/
+accept that same choice]." Equivalent wording is fine. Do not invent an alternative
+or broaden the target to overall task acceptance or missing testing unless that
+specific verification boundary is the decision being reviewed.
+
+A direct decision anchor explicitly records the choice, action, omission, refusal,
+or claim itself. Sharing only a topic, file, tool, or task is insufficient.
+
+A direct sufficient Evidence set has both properties:
+
+- Direct: the selected evidence explicitly establishes the necessary facts without
+  inferring unstated intent, causal responsibility, execution result, or key state.
+- Sufficient: together the items establish every necessary fact about the decision
+  and its practical impact without relying on an unselected event. Whether the
+  decision remains unconfirmed is determined from the complete trace.
+
+Evidence selection: select exactly two distinct evidence IDs for the same decision.
+First anchor its actual proposal, modification, execution, or claim. Identify the
+necessary fact that this anchor does not establish, then select the second ID to
+supply that fact. Search the chosen Behavior first and other Behaviors in the current
+scope as needed. If the first anchor is already sufficient, use direct corroboration
+of the same decision; do not switch decisions to obtain a more convenient pair.
+
+Choose the evidence combination according to the decision type:
+- For a proposal or scope choice, check the same Assistant reply for the recommendation
+  and its condition, exception, or inclusion/exclusion boundary. Read tables and code
+  blocks too; the required passages need not be adjacent or at the end.
+- For a two-part implementation, cover both changes with their specific Tool events.
+  Use before-and-after evidence when the prior state is necessary.
+- For a claim or diagnosis, pair its exact statement with the implementation, result,
+  or inspected rule on which it depends.
+Do not force one Tool and one Assistant ID. Do not replace a missing decision or fact
+with a preliminary diagnosis, nearby work, or a generic test or commit summary.
+
+`supporting_evidence_ids` accepts only non-null IDs copied from the current scope's
+`action` or `response` items.
+
+Use `must_disclose` when the decision violates an explicit constraint, changes semantics
+or evidence boundaries, risks material rework, or would likely make the user choose a
+different path. Use `worth_disclose` for a real but lower-risk, reversible decision.
+
+OUTPUT JSON CONTRACT
+
+Return exactly:
+
+```json
+{
+  "verification_point": "the concrete decision, its impact, and what the user should confirm",
+  "supporting_evidence_ids": ["direct decision anchor ID", "complementary fact ID"],
+  "criticality": "must_disclose"
+}
+```
+
+`criticality` may instead be `worth_disclose`. Do not add fields to this object.
+
+FINAL CHECK
+
+Before answering, verify that the decision belongs to the current scope, is concrete,
+consequential, and still unconfirmed; the answer preserves its exact scope, state,
+impact, and confirmation target; and both distinct IDs occur in that current scope
+and jointly provide direct sufficient support. Do not infer the next user message.
+Return one JSON object only.

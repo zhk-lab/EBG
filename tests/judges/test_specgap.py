@@ -240,31 +240,16 @@ class SpecGapJudgeAlignmentTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def test_prompt_is_byte_equivalent_to_the_formal_effective_prompt(self) -> None:
-        source_path = (
-            Path.home()
-            / "Desktop"
-            / "SpecGap"
-            / "scripts"
-            / "evaluate_specgap.py"
-        )
-        tree = ast.parse(source_path.read_text(encoding="utf-8"))
-        function = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name == "judge_system_prompt"
-        )
-        returned = next(
-            node.value
-            for node in function.body
-            if isinstance(node, ast.Return)
-        )
-        self.assertIsInstance(returned, ast.Constant)
-        self.assertEqual(
-            JUDGE.PROMPT_PATH.read_text(encoding="utf-8").strip(),
-            returned.value,
-        )
+    def test_bundled_gold_preserves_messages_and_location_scores(self) -> None:
+        from scripts.package_specgap_gold import bundle_gold
+        bundled = bundle_gold(self.gold, self.formal_root)
+        kwargs = {"document_after": "Visible document.", "repository_root": self.repository_root}
+        original = JUDGE.build_llm_messages(self.gold, self.prediction,
+                                            formal_data_root=self.formal_root, **kwargs)
+        self.assertEqual(JUDGE.build_llm_messages(bundled, self.prediction, **kwargs), original)
+        self.assertEqual(JUDGE.rule_based_score(bundled, self.prediction),
+                         JUDGE.rule_based_score(self.gold, self.prediction, formal_data_root=self.formal_root))
+
 
     def test_golden_message_has_formal_gold_and_resolved_candidate_source(self) -> None:
         gold = {**self.gold, "conditions": self.gold["conditions"][:1]}

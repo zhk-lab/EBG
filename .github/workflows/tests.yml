@@ -1,0 +1,48 @@
+name: Offline tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[test,analysis]"
+      - run: python -m scripts.demo
+      - run: python -m unittest discover -s tests -t . -q
+      - run: python -m unittest discover -s harness/case_studies -p test_cases.py -q
+      - name: Analysis tests
+        shell: bash
+        run: |
+          for experiment in ablation sensitivity input_size failure_analysis cost; do
+            python -m unittest discover -s "experiments/$experiment/scripts" -p 'test_*.py' -q
+          done
+  builders:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        benchmark: [specgap, silentswap, feedbacktrace]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest -r benchmarks/${{ matrix.benchmark }}/requirements.txt
+      - run: python -m pytest benchmarks/${{ matrix.benchmark }}/tests -q
+  harness:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: harness
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -t . -q

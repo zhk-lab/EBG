@@ -1,0 +1,130 @@
+ROLE AND OBJECTIVE
+
+Review the complete visible trace up to its cutoff. Identify the one concrete,
+consequential Agent decision that remains unconfirmed and matters most for the user to
+verify. Every formal sample contains such a decision. Do not predict or reconstruct the
+next user message.
+
+A decision includes a specific choice, action, omission, or claim of success. It is
+consequential when it changes the task goal, implementation path, result meaning,
+compatibility, cost, maintainability, evaluation boundary, or the evidence needed to
+claim success. It is unconfirmed when the user has not approved or otherwise resolved
+that exact decision later in the visible trace.
+
+INPUT FORMAT
+
+The trace is represented by Task Scopes containing individual Evidence records.
+`current_task_id` identifies the current task; each scope has a `task_id` and a `status`
+of `current` or `history`. Within each scope, `evidence` lists source records in original
+event order, without Behavior groups or demand/action/response labels.
+`id` is an internal identifier; non-null `evidence_id` values are selectable identifiers.
+`content` is original text or an exact excerpt, located by `char_range`.
+`turn` and `event_index` record original positions; `event_type` identifies the original
+message/tool source. `relations` contains references between tasks.
+
+HOW TO READ THE INPUT
+
+- Use `turn` and `event_index` to follow the original event order across Task Scopes.
+  Preserve conversational meaning: a later user event may approve, reject, narrow,
+  or supersede an earlier Agent decision.
+- User events define goals, constraints, approvals, and unresolved choices.
+- Assistant events show reasoning communicated to the user, decisions, claims,
+  and reported outcomes.
+- Tool events show what the Agent attempted and what the environment returned.
+  Tool evidence may establish impact or verification quality, but tool activity
+  alone does not make a decision consequential.
+- Task labels and relations describe organization and context; they do not by
+  themselves establish a verification point or restrict which task may be selected.
+- An evidence ID may have multiple excerpts. Read all occurrences before interpreting
+  it. Cite only non-null `evidence_id` values, never internal `id` values.
+
+DECISION SELECTION RULES
+
+Select a decision chain only when the trace supports all four parts:
+
+1. User boundary: the relevant user goal, constraint, authority, rejection, or unresolved
+   choice is clear.
+2. Agent decision: the Agent made a specific choice, took an action, omitted a required
+   step, or asserted a result; merely discussing an option is not enough.
+3. Consequence: the decision materially affects task semantics, scope, implementation,
+   compatibility, cost, maintainability, evaluation or evidence boundaries, or the
+   meaning of a claimed result. A success claim based on inadequate verification can
+   satisfy this part.
+4. Still unconfirmed: the user did not subsequently approve or otherwise resolve that
+   exact decision before the cutoff.
+
+If several chains qualify, report the one whose confirmation would matter most to the
+user. A high-level instruction or approval authorizes the requested goal, not every
+unmentioned implementation choice made while pursuing it. Routine mechanical work,
+missing information, neutral trace structure, and tool usage are not independently
+sufficient; always select the most consequential supported decision.
+
+VERIFICATION POINT AND EVIDENCE DEFINITIONS
+
+A `verification_point` expresses one complete disclosure issue with three semantic
+parts:
+
+1. Concrete Agent decision: what the Agent chose, did, omitted, refused, or claimed,
+   including every object, scope, and key state needed to identify that decision. Key
+   states include planned versus executed, attempted versus succeeded, read versus
+   modified, and claimed verification versus actual verification.
+2. Practical impact: the evidence-supported reason the decision matters to the user,
+   such as changed behavior, scope, compatibility, cost, maintainability, evaluation
+   boundary, rework risk, or weaker support for a success claim. This is a consequence,
+   not a speculative concern or a proposed remedy.
+3. User confirmation target: the exact decision the user must resolve by accepting,
+   retaining, rejecting, revising, or requiring further verification. It is not a generic
+   request to "confirm this."
+
+The three parts form one meaning and need not be written as three sentences or fields.
+The statement must remain understandable without opening the cited Evidence.
+
+A direct decision anchor is a selectable Agent or Tool event that explicitly records the
+decision, action, omission, refusal, conclusion, or claim itself. Mentioning the same
+topic, file, tool, task, or nearby work is not a direct anchor. When the decision anchor
+does not itself establish the practical impact or verification quality, a second direct
+consequence anchor may supply that necessary fact.
+
+A minimal direct sufficient Evidence set has all three properties:
+
+- Direct: each selected item explicitly establishes a necessary fact without requiring an
+  outside event or an inference about unstated intent, causal responsibility, execution
+  result, or key state.
+- Sufficient: together the selected items establish every evidentiary fact needed for the
+  concrete decision and practical impact, with the same proof effect as the visible
+  trace. The fact that the decision remains unconfirmed is determined from the complete
+  trace and need not appear as a quoted Agent event.
+- Minimal: removing any selected item would make the remaining set no longer direct or
+  sufficient. Semantically equivalent or background evidence is therefore omitted.
+
+Cite one direct anchor when it is sufficient; cite two IDs only when the second is
+necessary to establish impact or verification quality. Copy every ID exactly from the
+selectable Evidence IDs.
+
+`supporting_evidence_ids` accepts only values copied from a non-null `evidence_id` in the
+visible input.
+
+Use `must_disclose` when the decision violates an explicit constraint, changes semantics
+or evidence boundaries, risks material rework, or would likely make the user choose a
+different path. Use `worth_disclose` for a real but lower-risk, reversible decision.
+
+OUTPUT JSON CONTRACT
+
+Return exactly:
+
+```json
+{
+  "verification_point": "the concrete decision, its impact, and what the user should confirm",
+  "supporting_evidence_ids": ["one or two exact selectable IDs"],
+  "criticality": "must_disclose"
+}
+```
+
+`criticality` may instead be `worth_disclose`. Do not add fields to this object.
+
+FINAL CHECK
+
+Before answering, verify that the decision is concrete, consequential, and still
+unconfirmed; every cited ID was copied from a non-null `evidence_id` and directly
+supports it; and the answer does not infer the next user message. Return one JSON object
+only.

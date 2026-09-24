@@ -155,45 +155,16 @@ class FormalJudgeAlignmentTests(unittest.TestCase):
         self.assertEqual(score, JUDGE.rule_based_score(_gold(), _prediction()))
         self.assertEqual(score["predicted_swaps"], 5)
 
-    def test_ss001_full_message_matches_frozen_formal_runner(self) -> None:
-        gold_path = (
-            STAGING_ROOT
-            / "evaluation/silentswap/artifacts/hidden_gold/ss_001.json"
-        )
-        gold = json.loads(gold_path.read_text(encoding="utf-8"))
+    def test_message_keeps_gold_reference_fields(self) -> None:
+        gold = _gold()
         messages = JUDGE.build_llm_messages(gold, {"swaps": []})
-        scripts = Path.home() / "Desktop" / "SilentSwap" / "scripts"
-        sys.path.insert(0, str(scripts))
-        try:
-            import evaluate_deepseek as formal_benchmark
-            import evaluate_models as formal_runner
-        finally:
-            sys.path.pop(0)
-        sample = Path.home() / "Desktop" / "SilentSwap" / "data" / "1"
-        reference = formal_runner.judge_reference(sample)
-        self.assertEqual(
-            messages,
-            [
-                {"role": "system", "content": formal_runner.JUDGE_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": formal_benchmark.judge_prompt(
-                        reference, {"swaps": []}
-                    ),
-                },
-            ],
-        )
+        self.assertEqual([message["role"] for message in messages], ["system", "user"])
+        self.assertIn('"swaps": []', messages[1]["content"])
         reference = JUDGE.build_judge_reference(gold)
-        self.assertEqual(
-            set(reference["swaps"][0]),
-            {
-                "swap_number",
-                "gold",
-                "localization",
-                "document_target",
-                "executed_behavior_difference",
-            },
-        )
+        self.assertEqual(set(reference["swaps"][0]), {
+            "swap_number", "gold", "localization", "document_target",
+            "executed_behavior_difference",
+        })
         self.assertIn("changed_files", reference)
 
     def test_objective_localization_matches_formal_assignment(self) -> None:

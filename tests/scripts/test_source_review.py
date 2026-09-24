@@ -23,7 +23,7 @@ def write(path, value):
 class SourceReviewCommandTests(unittest.TestCase):
     def test_formal_experiment_judge_uses_stage_directories_and_saved_workers(self):
         with ProjectTemporaryDirectory() as root:
-            ebg = root / "experiments/EBG/silentswap/sol"
+            ebg = root / "outputs/main/EBG/silentswap/sol"
             judge = "glm-5-2"
             write(ebg / "stage2/manifest.json", {
                 "source_experiment": str((ebg / "stage1").resolve()),

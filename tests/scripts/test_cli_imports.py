@@ -8,16 +8,17 @@ import unittest
 
 
 class CliImportTests(unittest.TestCase):
-    def test_key_detection_entry_point_starts(self):
+    def test_main_entry_points_start(self):
         root = Path(__file__).resolve().parents[2]
         env = os.environ.copy()
         env.pop("PYTHONPATH", None)
-        result = subprocess.run(
-            [sys.executable, str(root / "analysis_experiment" /
-             "feedbacktrace_key_detection" / "scripts" / "experiment.py"), "--help"],
-            cwd=root, env=env, capture_output=True, text=True, timeout=30,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in ("prepare", "predict", "judge"):
+            with self.subTest(command=name):
+                result = subprocess.run(
+                    [sys.executable, "-m", f"scripts.main.{name}", "--help"],
+                    cwd=root, env=env, capture_output=True, text=True, timeout=30,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_sensitivity_entry_points_start(self):
         root = Path(__file__).resolve().parents[2]
@@ -26,8 +27,8 @@ class CliImportTests(unittest.TestCase):
         for name in ("run.py", "summarize.py"):
             with self.subTest(script=name):
                 result = subprocess.run(
-                    [sys.executable, str(root / "analysis_experiment" /
-                     "hyperparameter_sensitivity" / "scripts" / name), "--help"],
+                    [sys.executable, str(root / "experiments" /
+                     "sensitivity" / "scripts" / name), "--help"],
                     cwd=root, env=env, capture_output=True, text=True, timeout=30,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)

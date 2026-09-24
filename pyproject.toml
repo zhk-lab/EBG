@@ -6,11 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "ebg"
 version = "0.1.0"
 description = "Deterministic Evidence-Grounded Behavior Graph construction"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.20", "tiktoken>=0.7", "python-dotenv>=1.0"]
 
 [project.optional-dependencies]
-test = ["jsonschema>=4.20"]
+test = ["pytest>=8"]
+analysis = ["numpy>=1.26", "matplotlib>=3.8"]
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
@@ -29,6 +32,3 @@ include = [
   "scripts.*",
 ]
 namespaces = false
-
-[tool.unittest]
-start-directory = "tests"

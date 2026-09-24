@@ -1,0 +1,385 @@
+benchmark,judge,model,method,metric,value
+SpecGap,GLM,Luna,EBG,Missing-Constraint Discovery F1,0.352
+SpecGap,GLM,Luna,Base,Missing-Constraint Discovery F1,0.265
+SpecGap,GLM,Luna,RepoGraph,Missing-Constraint Discovery F1,0.264
+SpecGap,GLM,Luna,EBG,Question Quality,0.713
+SpecGap,GLM,Luna,Base,Question Quality,0.636
+SpecGap,GLM,Luna,RepoGraph,Question Quality,0.613
+SpecGap,GLM,Luna,EBG,Location F1,0.418
+SpecGap,GLM,Luna,Base,Location F1,0.305
+SpecGap,GLM,Luna,RepoGraph,Location F1,0.270
+SpecGap,GLM,Flash,EBG,Missing-Constraint Discovery F1,0.409
+SpecGap,GLM,Flash,Base,Missing-Constraint Discovery F1,0.401
+SpecGap,GLM,Flash,RepoGraph,Missing-Constraint Discovery F1,0.362
+SpecGap,GLM,Flash,EBG,Question Quality,0.835
+SpecGap,GLM,Flash,Base,Question Quality,0.829
+SpecGap,GLM,Flash,RepoGraph,Question Quality,0.718
+SpecGap,GLM,Flash,EBG,Location F1,0.469
+SpecGap,GLM,Flash,Base,Location F1,0.459
+SpecGap,GLM,Flash,RepoGraph,Location F1,0.388
+SpecGap,GLM,Pro,EBG,Missing-Constraint Discovery F1,0.241
+SpecGap,GLM,Pro,Base,Missing-Constraint Discovery F1,0.130
+SpecGap,GLM,Pro,RepoGraph,Missing-Constraint Discovery F1,0.141
+SpecGap,GLM,Pro,EBG,Question Quality,0.590
+SpecGap,GLM,Pro,Base,Question Quality,0.320
+SpecGap,GLM,Pro,RepoGraph,Question Quality,0.366
+SpecGap,GLM,Pro,EBG,Location F1,0.360
+SpecGap,GLM,Pro,Base,Location F1,0.171
+SpecGap,GLM,Pro,RepoGraph,Location F1,0.186
+SpecGap,GLM,Terra,EBG,Missing-Constraint Discovery F1,0.403
+SpecGap,GLM,Terra,Base,Missing-Constraint Discovery F1,0.282
+SpecGap,GLM,Terra,RepoGraph,Missing-Constraint Discovery F1,0.224
+SpecGap,GLM,Terra,EBG,Question Quality,0.856
+SpecGap,GLM,Terra,Base,Question Quality,0.700
+SpecGap,GLM,Terra,RepoGraph,Question Quality,0.569
+SpecGap,GLM,Terra,EBG,Location F1,0.462
+SpecGap,GLM,Terra,Base,Location F1,0.309
+SpecGap,GLM,Terra,RepoGraph,Location F1,0.221
+SpecGap,GLM,Sol,EBG,Missing-Constraint Discovery F1,0.527
+SpecGap,GLM,Sol,Base,Missing-Constraint Discovery F1,0.462
+SpecGap,GLM,Sol,RepoGraph,Missing-Constraint Discovery F1,0.424
+SpecGap,GLM,Sol,EBG,Question Quality,0.954
+SpecGap,GLM,Sol,Base,Question Quality,0.922
+SpecGap,GLM,Sol,RepoGraph,Question Quality,0.852
+SpecGap,GLM,Sol,EBG,Location F1,0.569
+SpecGap,GLM,Sol,Base,Location F1,0.501
+SpecGap,GLM,Sol,RepoGraph,Location F1,0.445
+SpecGap,GLM,K3,EBG,Missing-Constraint Discovery F1,0.569
+SpecGap,GLM,K3,Base,Missing-Constraint Discovery F1,0.502
+SpecGap,GLM,K3,RepoGraph,Missing-Constraint Discovery F1,0.442
+SpecGap,GLM,K3,EBG,Question Quality,0.954
+SpecGap,GLM,K3,Base,Question Quality,0.924
+SpecGap,GLM,K3,RepoGraph,Question Quality,0.840
+SpecGap,GLM,K3,EBG,Location F1,0.603
+SpecGap,GLM,K3,Base,Location F1,0.497
+SpecGap,GLM,K3,RepoGraph,Location F1,0.419
+SpecGap,GLM,Sonnet 5,EBG,Missing-Constraint Discovery F1,0.355
+SpecGap,GLM,Sonnet 5,Base,Missing-Constraint Discovery F1,0.338
+SpecGap,GLM,Sonnet 5,RepoGraph,Missing-Constraint Discovery F1,0.292
+SpecGap,GLM,Sonnet 5,EBG,Question Quality,0.828
+SpecGap,GLM,Sonnet 5,Base,Question Quality,0.799
+SpecGap,GLM,Sonnet 5,RepoGraph,Question Quality,0.728
+SpecGap,GLM,Sonnet 5,EBG,Location F1,0.409
+SpecGap,GLM,Sonnet 5,Base,Location F1,0.368
+SpecGap,GLM,Sonnet 5,RepoGraph,Location F1,0.322
+SpecGap,GLM,GLM-5-3 (low),EBG,Missing-Constraint Discovery F1,0.548
+SpecGap,GLM,GLM-5-3 (low),Base,Missing-Constraint Discovery F1,0.492
+SpecGap,GLM,GLM-5-3 (low),RepoGraph,Missing-Constraint Discovery F1,0.420
+SpecGap,GLM,GLM-5-3 (low),EBG,Question Quality,0.949
+SpecGap,GLM,GLM-5-3 (low),Base,Question Quality,0.882
+SpecGap,GLM,GLM-5-3 (low),RepoGraph,Question Quality,0.841
+SpecGap,GLM,GLM-5-3 (low),EBG,Location F1,0.581
+SpecGap,GLM,GLM-5-3 (low),Base,Location F1,0.498
+SpecGap,GLM,GLM-5-3 (low),RepoGraph,Location F1,0.420
+SpecGap,Qwen,Luna,EBG,Missing-Constraint Discovery F1,0.300
+SpecGap,Qwen,Luna,Base,Missing-Constraint Discovery F1,0.234
+SpecGap,Qwen,Luna,RepoGraph,Missing-Constraint Discovery F1,0.217
+SpecGap,Qwen,Luna,EBG,Question Quality,0.730
+SpecGap,Qwen,Luna,Base,Question Quality,0.618
+SpecGap,Qwen,Luna,RepoGraph,Question Quality,0.561
+SpecGap,Qwen,Luna,EBG,Location F1,0.418
+SpecGap,Qwen,Luna,Base,Location F1,0.305
+SpecGap,Qwen,Luna,RepoGraph,Location F1,0.270
+SpecGap,Qwen,Flash,EBG,Missing-Constraint Discovery F1,0.334
+SpecGap,Qwen,Flash,Base,Missing-Constraint Discovery F1,0.350
+SpecGap,Qwen,Flash,RepoGraph,Missing-Constraint Discovery F1,0.309
+SpecGap,Qwen,Flash,EBG,Question Quality,0.778
+SpecGap,Qwen,Flash,Base,Question Quality,0.834
+SpecGap,Qwen,Flash,RepoGraph,Question Quality,0.714
+SpecGap,Qwen,Flash,EBG,Location F1,0.469
+SpecGap,Qwen,Flash,Base,Location F1,0.459
+SpecGap,Qwen,Flash,RepoGraph,Location F1,0.388
+SpecGap,Qwen,Pro,EBG,Missing-Constraint Discovery F1,0.194
+SpecGap,Qwen,Pro,Base,Missing-Constraint Discovery F1,0.116
+SpecGap,Qwen,Pro,RepoGraph,Missing-Constraint Discovery F1,0.126
+SpecGap,Qwen,Pro,EBG,Question Quality,0.503
+SpecGap,Qwen,Pro,Base,Question Quality,0.296
+SpecGap,Qwen,Pro,RepoGraph,Question Quality,0.347
+SpecGap,Qwen,Pro,EBG,Location F1,0.360
+SpecGap,Qwen,Pro,Base,Location F1,0.171
+SpecGap,Qwen,Pro,RepoGraph,Location F1,0.186
+SpecGap,Qwen,Terra,EBG,Missing-Constraint Discovery F1,0.380
+SpecGap,Qwen,Terra,Base,Missing-Constraint Discovery F1,0.268
+SpecGap,Qwen,Terra,RepoGraph,Missing-Constraint Discovery F1,0.205
+SpecGap,Qwen,Terra,EBG,Question Quality,0.848
+SpecGap,Qwen,Terra,Base,Question Quality,0.677
+SpecGap,Qwen,Terra,RepoGraph,Question Quality,0.547
+SpecGap,Qwen,Terra,EBG,Location F1,0.462
+SpecGap,Qwen,Terra,Base,Location F1,0.309
+SpecGap,Qwen,Terra,RepoGraph,Location F1,0.221
+SpecGap,Qwen,Sol,EBG,Missing-Constraint Discovery F1,0.483
+SpecGap,Qwen,Sol,Base,Missing-Constraint Discovery F1,0.449
+SpecGap,Qwen,Sol,RepoGraph,Missing-Constraint Discovery F1,0.395
+SpecGap,Qwen,Sol,EBG,Question Quality,0.963
+SpecGap,Qwen,Sol,Base,Question Quality,0.924
+SpecGap,Qwen,Sol,RepoGraph,Question Quality,0.833
+SpecGap,Qwen,Sol,EBG,Location F1,0.569
+SpecGap,Qwen,Sol,Base,Location F1,0.501
+SpecGap,Qwen,Sol,RepoGraph,Location F1,0.445
+SpecGap,Qwen,K3,EBG,Missing-Constraint Discovery F1,0.547
+SpecGap,Qwen,K3,Base,Missing-Constraint Discovery F1,0.485
+SpecGap,Qwen,K3,RepoGraph,Missing-Constraint Discovery F1,0.444
+SpecGap,Qwen,K3,EBG,Question Quality,0.953
+SpecGap,Qwen,K3,Base,Question Quality,0.930
+SpecGap,Qwen,K3,RepoGraph,Question Quality,0.882
+SpecGap,Qwen,K3,EBG,Location F1,0.603
+SpecGap,Qwen,K3,Base,Location F1,0.497
+SpecGap,Qwen,K3,RepoGraph,Location F1,0.419
+SpecGap,Qwen,Sonnet 5,EBG,Missing-Constraint Discovery F1,0.307
+SpecGap,Qwen,Sonnet 5,Base,Missing-Constraint Discovery F1,0.318
+SpecGap,Qwen,Sonnet 5,RepoGraph,Missing-Constraint Discovery F1,0.246
+SpecGap,Qwen,Sonnet 5,EBG,Question Quality,0.784
+SpecGap,Qwen,Sonnet 5,Base,Question Quality,0.771
+SpecGap,Qwen,Sonnet 5,RepoGraph,Question Quality,0.666
+SpecGap,Qwen,Sonnet 5,EBG,Location F1,0.409
+SpecGap,Qwen,Sonnet 5,Base,Location F1,0.368
+SpecGap,Qwen,Sonnet 5,RepoGraph,Location F1,0.322
+SpecGap,Qwen,GLM-5-3 (low),EBG,Missing-Constraint Discovery F1,0.503
+SpecGap,Qwen,GLM-5-3 (low),Base,Missing-Constraint Discovery F1,0.470
+SpecGap,Qwen,GLM-5-3 (low),RepoGraph,Missing-Constraint Discovery F1,0.394
+SpecGap,Qwen,GLM-5-3 (low),EBG,Question Quality,0.960
+SpecGap,Qwen,GLM-5-3 (low),Base,Question Quality,0.892
+SpecGap,Qwen,GLM-5-3 (low),RepoGraph,Question Quality,0.820
+SpecGap,Qwen,GLM-5-3 (low),EBG,Location F1,0.581
+SpecGap,Qwen,GLM-5-3 (low),Base,Location F1,0.498
+SpecGap,Qwen,GLM-5-3 (low),RepoGraph,Location F1,0.420
+SilentSwap,GLM,Luna,EBG,Localization Score,0.455
+SilentSwap,GLM,Luna,Base,Localization Score,0.403
+SilentSwap,GLM,Luna,RepoGraph,Localization Score,0.293
+SilentSwap,GLM,Luna,EBG,Location Correct,0.355
+SilentSwap,GLM,Luna,Base,Location Correct,0.385
+SilentSwap,GLM,Luna,RepoGraph,Location Correct,0.295
+SilentSwap,GLM,Luna,EBG,Code Correct,0.305
+SilentSwap,GLM,Luna,Base,Code Correct,0.245
+SilentSwap,GLM,Luna,RepoGraph,Code Correct,0.195
+SilentSwap,GLM,Flash,EBG,Localization Score,0.492
+SilentSwap,GLM,Flash,Base,Localization Score,0.262
+SilentSwap,GLM,Flash,RepoGraph,Localization Score,0.344
+SilentSwap,GLM,Flash,EBG,Location Correct,0.335
+SilentSwap,GLM,Flash,Base,Location Correct,0.230
+SilentSwap,GLM,Flash,RepoGraph,Location Correct,0.240
+SilentSwap,GLM,Flash,EBG,Code Correct,0.165
+SilentSwap,GLM,Flash,Base,Code Correct,0.130
+SilentSwap,GLM,Flash,RepoGraph,Code Correct,0.165
+SilentSwap,GLM,Pro,EBG,Localization Score,0.408
+SilentSwap,GLM,Pro,Base,Localization Score,0.288
+SilentSwap,GLM,Pro,RepoGraph,Localization Score,0.281
+SilentSwap,GLM,Pro,EBG,Location Correct,0.225
+SilentSwap,GLM,Pro,Base,Location Correct,0.210
+SilentSwap,GLM,Pro,RepoGraph,Location Correct,0.200
+SilentSwap,GLM,Pro,EBG,Code Correct,0.155
+SilentSwap,GLM,Pro,Base,Code Correct,0.115
+SilentSwap,GLM,Pro,RepoGraph,Code Correct,0.085
+SilentSwap,GLM,Terra,EBG,Localization Score,0.623
+SilentSwap,GLM,Terra,Base,Localization Score,0.417
+SilentSwap,GLM,Terra,RepoGraph,Localization Score,0.415
+SilentSwap,GLM,Terra,EBG,Location Correct,0.565
+SilentSwap,GLM,Terra,Base,Location Correct,0.525
+SilentSwap,GLM,Terra,RepoGraph,Location Correct,0.445
+SilentSwap,GLM,Terra,EBG,Code Correct,0.615
+SilentSwap,GLM,Terra,Base,Code Correct,0.595
+SilentSwap,GLM,Terra,RepoGraph,Code Correct,0.415
+SilentSwap,GLM,Sol,EBG,Localization Score,0.671
+SilentSwap,GLM,Sol,Base,Localization Score,0.464
+SilentSwap,GLM,Sol,RepoGraph,Localization Score,0.459
+SilentSwap,GLM,Sol,EBG,Location Correct,0.590
+SilentSwap,GLM,Sol,Base,Location Correct,0.535
+SilentSwap,GLM,Sol,RepoGraph,Location Correct,0.515
+SilentSwap,GLM,Sol,EBG,Code Correct,0.605
+SilentSwap,GLM,Sol,Base,Code Correct,0.590
+SilentSwap,GLM,Sol,RepoGraph,Code Correct,0.450
+SilentSwap,GLM,K3,EBG,Localization Score,0.681
+SilentSwap,GLM,K3,Base,Localization Score,0.555
+SilentSwap,GLM,K3,RepoGraph,Localization Score,0.406
+SilentSwap,GLM,K3,EBG,Location Correct,0.545
+SilentSwap,GLM,K3,Base,Location Correct,0.590
+SilentSwap,GLM,K3,RepoGraph,Location Correct,0.390
+SilentSwap,GLM,K3,EBG,Code Correct,0.740
+SilentSwap,GLM,K3,Base,Code Correct,0.705
+SilentSwap,GLM,K3,RepoGraph,Code Correct,0.555
+SilentSwap,GLM,Sonnet 5,EBG,Localization Score,0.425
+SilentSwap,GLM,Sonnet 5,Base,Localization Score,0.294
+SilentSwap,GLM,Sonnet 5,RepoGraph,Localization Score,0.258
+SilentSwap,GLM,Sonnet 5,EBG,Location Correct,0.280
+SilentSwap,GLM,Sonnet 5,Base,Location Correct,0.240
+SilentSwap,GLM,Sonnet 5,RepoGraph,Location Correct,0.195
+SilentSwap,GLM,Sonnet 5,EBG,Code Correct,0.265
+SilentSwap,GLM,Sonnet 5,Base,Code Correct,0.235
+SilentSwap,GLM,Sonnet 5,RepoGraph,Code Correct,0.085
+SilentSwap,GLM,GLM-5-3 (low),EBG,Localization Score,0.708
+SilentSwap,GLM,GLM-5-3 (low),Base,Localization Score,0.560
+SilentSwap,GLM,GLM-5-3 (low),RepoGraph,Localization Score,0.561
+SilentSwap,GLM,GLM-5-3 (low),EBG,Location Correct,0.620
+SilentSwap,GLM,GLM-5-3 (low),Base,Location Correct,0.645
+SilentSwap,GLM,GLM-5-3 (low),RepoGraph,Location Correct,0.570
+SilentSwap,GLM,GLM-5-3 (low),EBG,Code Correct,0.700
+SilentSwap,GLM,GLM-5-3 (low),Base,Code Correct,0.670
+SilentSwap,GLM,GLM-5-3 (low),RepoGraph,Code Correct,0.555
+SilentSwap,Qwen,Luna,EBG,Localization Score,0.455
+SilentSwap,Qwen,Luna,Base,Localization Score,0.403
+SilentSwap,Qwen,Luna,RepoGraph,Localization Score,0.293
+SilentSwap,Qwen,Luna,EBG,Location Correct,0.310
+SilentSwap,Qwen,Luna,Base,Location Correct,0.275
+SilentSwap,Qwen,Luna,RepoGraph,Location Correct,0.120
+SilentSwap,Qwen,Luna,EBG,Code Correct,0.270
+SilentSwap,Qwen,Luna,Base,Code Correct,0.290
+SilentSwap,Qwen,Luna,RepoGraph,Code Correct,0.190
+SilentSwap,Qwen,Flash,EBG,Localization Score,0.492
+SilentSwap,Qwen,Flash,Base,Localization Score,0.262
+SilentSwap,Qwen,Flash,RepoGraph,Localization Score,0.344
+SilentSwap,Qwen,Flash,EBG,Location Correct,0.295
+SilentSwap,Qwen,Flash,Base,Location Correct,0.100
+SilentSwap,Qwen,Flash,RepoGraph,Location Correct,0.200
+SilentSwap,Qwen,Flash,EBG,Code Correct,0.145
+SilentSwap,Qwen,Flash,Base,Code Correct,0.120
+SilentSwap,Qwen,Flash,RepoGraph,Code Correct,0.190
+SilentSwap,Qwen,Pro,EBG,Localization Score,0.408
+SilentSwap,Qwen,Pro,Base,Localization Score,0.288
+SilentSwap,Qwen,Pro,RepoGraph,Localization Score,0.281
+SilentSwap,Qwen,Pro,EBG,Location Correct,0.235
+SilentSwap,Qwen,Pro,Base,Location Correct,0.160
+SilentSwap,Qwen,Pro,RepoGraph,Location Correct,0.125
+SilentSwap,Qwen,Pro,EBG,Code Correct,0.165
+SilentSwap,Qwen,Pro,Base,Code Correct,0.155
+SilentSwap,Qwen,Pro,RepoGraph,Code Correct,0.075
+SilentSwap,Qwen,Terra,EBG,Localization Score,0.623
+SilentSwap,Qwen,Terra,Base,Localization Score,0.417
+SilentSwap,Qwen,Terra,RepoGraph,Localization Score,0.415
+SilentSwap,Qwen,Terra,EBG,Location Correct,0.515
+SilentSwap,Qwen,Terra,Base,Location Correct,0.300
+SilentSwap,Qwen,Terra,RepoGraph,Location Correct,0.270
+SilentSwap,Qwen,Terra,EBG,Code Correct,0.590
+SilentSwap,Qwen,Terra,Base,Code Correct,0.570
+SilentSwap,Qwen,Terra,RepoGraph,Code Correct,0.425
+SilentSwap,Qwen,Sol,EBG,Localization Score,0.671
+SilentSwap,Qwen,Sol,Base,Localization Score,0.464
+SilentSwap,Qwen,Sol,RepoGraph,Localization Score,0.459
+SilentSwap,Qwen,Sol,EBG,Location Correct,0.550
+SilentSwap,Qwen,Sol,Base,Location Correct,0.320
+SilentSwap,Qwen,Sol,RepoGraph,Location Correct,0.260
+SilentSwap,Qwen,Sol,EBG,Code Correct,0.590
+SilentSwap,Qwen,Sol,Base,Code Correct,0.605
+SilentSwap,Qwen,Sol,RepoGraph,Code Correct,0.475
+SilentSwap,Qwen,K3,EBG,Localization Score,0.681
+SilentSwap,Qwen,K3,Base,Localization Score,0.555
+SilentSwap,Qwen,K3,RepoGraph,Localization Score,0.406
+SilentSwap,Qwen,K3,EBG,Location Correct,0.570
+SilentSwap,Qwen,K3,Base,Location Correct,0.430
+SilentSwap,Qwen,K3,RepoGraph,Location Correct,0.275
+SilentSwap,Qwen,K3,EBG,Code Correct,0.720
+SilentSwap,Qwen,K3,Base,Code Correct,0.675
+SilentSwap,Qwen,K3,RepoGraph,Code Correct,0.535
+SilentSwap,Qwen,Sonnet 5,EBG,Localization Score,0.425
+SilentSwap,Qwen,Sonnet 5,Base,Localization Score,0.294
+SilentSwap,Qwen,Sonnet 5,RepoGraph,Localization Score,0.258
+SilentSwap,Qwen,Sonnet 5,EBG,Location Correct,0.235
+SilentSwap,Qwen,Sonnet 5,Base,Location Correct,0.135
+SilentSwap,Qwen,Sonnet 5,RepoGraph,Location Correct,0.130
+SilentSwap,Qwen,Sonnet 5,EBG,Code Correct,0.270
+SilentSwap,Qwen,Sonnet 5,Base,Code Correct,0.210
+SilentSwap,Qwen,Sonnet 5,RepoGraph,Code Correct,0.080
+SilentSwap,Qwen,GLM-5-3 (low),EBG,Localization Score,0.708
+SilentSwap,Qwen,GLM-5-3 (low),Base,Localization Score,0.560
+SilentSwap,Qwen,GLM-5-3 (low),RepoGraph,Localization Score,0.561
+SilentSwap,Qwen,GLM-5-3 (low),EBG,Location Correct,0.590
+SilentSwap,Qwen,GLM-5-3 (low),Base,Location Correct,0.375
+SilentSwap,Qwen,GLM-5-3 (low),RepoGraph,Location Correct,0.440
+SilentSwap,Qwen,GLM-5-3 (low),EBG,Code Correct,0.720
+SilentSwap,Qwen,GLM-5-3 (low),Base,Code Correct,0.685
+SilentSwap,Qwen,GLM-5-3 (low),RepoGraph,Code Correct,0.520
+FeedbackTrace,GLM,Luna,EBG,Verification Point Alignment,0.525
+FeedbackTrace,GLM,Luna,Base,Verification Point Alignment,0.510
+FeedbackTrace,GLM,Luna,EBG,Evidence Location Score,0.550
+FeedbackTrace,GLM,Luna,Base,Evidence Location Score,0.545
+FeedbackTrace,GLM,Luna,EBG,Evidence Hit Rate,0.570
+FeedbackTrace,GLM,Luna,Base,Evidence Hit Rate,0.530
+FeedbackTrace,GLM,Flash,EBG,Verification Point Alignment,0.520
+FeedbackTrace,GLM,Flash,Base,Verification Point Alignment,0.440
+FeedbackTrace,GLM,Flash,EBG,Evidence Location Score,0.545
+FeedbackTrace,GLM,Flash,Base,Evidence Location Score,0.445
+FeedbackTrace,GLM,Flash,EBG,Evidence Hit Rate,0.600
+FeedbackTrace,GLM,Flash,Base,Evidence Hit Rate,0.540
+FeedbackTrace,GLM,Pro,EBG,Verification Point Alignment,0.320
+FeedbackTrace,GLM,Pro,Base,Verification Point Alignment,0.315
+FeedbackTrace,GLM,Pro,EBG,Evidence Location Score,0.370
+FeedbackTrace,GLM,Pro,Base,Evidence Location Score,0.345
+FeedbackTrace,GLM,Pro,EBG,Evidence Hit Rate,0.370
+FeedbackTrace,GLM,Pro,Base,Evidence Hit Rate,0.340
+FeedbackTrace,GLM,Terra,EBG,Verification Point Alignment,0.550
+FeedbackTrace,GLM,Terra,Base,Verification Point Alignment,0.555
+FeedbackTrace,GLM,Terra,EBG,Evidence Location Score,0.575
+FeedbackTrace,GLM,Terra,Base,Evidence Location Score,0.585
+FeedbackTrace,GLM,Terra,EBG,Evidence Hit Rate,0.580
+FeedbackTrace,GLM,Terra,Base,Evidence Hit Rate,0.540
+FeedbackTrace,GLM,Sol,EBG,Verification Point Alignment,0.540
+FeedbackTrace,GLM,Sol,Base,Verification Point Alignment,0.535
+FeedbackTrace,GLM,Sol,EBG,Evidence Location Score,0.580
+FeedbackTrace,GLM,Sol,Base,Evidence Location Score,0.525
+FeedbackTrace,GLM,Sol,EBG,Evidence Hit Rate,0.610
+FeedbackTrace,GLM,Sol,Base,Evidence Hit Rate,0.550
+FeedbackTrace,GLM,K3,EBG,Verification Point Alignment,0.550
+FeedbackTrace,GLM,K3,Base,Verification Point Alignment,0.475
+FeedbackTrace,GLM,K3,EBG,Evidence Location Score,0.595
+FeedbackTrace,GLM,K3,Base,Evidence Location Score,0.510
+FeedbackTrace,GLM,K3,EBG,Evidence Hit Rate,0.610
+FeedbackTrace,GLM,K3,Base,Evidence Hit Rate,0.550
+FeedbackTrace,GLM,Sonnet 5,EBG,Verification Point Alignment,0.520
+FeedbackTrace,GLM,Sonnet 5,Base,Verification Point Alignment,0.455
+FeedbackTrace,GLM,Sonnet 5,EBG,Evidence Location Score,0.575
+FeedbackTrace,GLM,Sonnet 5,Base,Evidence Location Score,0.435
+FeedbackTrace,GLM,Sonnet 5,EBG,Evidence Hit Rate,0.600
+FeedbackTrace,GLM,Sonnet 5,Base,Evidence Hit Rate,0.480
+FeedbackTrace,GLM,GLM-5-3 (low),EBG,Verification Point Alignment,0.570
+FeedbackTrace,GLM,GLM-5-3 (low),Base,Verification Point Alignment,0.495
+FeedbackTrace,GLM,GLM-5-3 (low),EBG,Evidence Location Score,0.555
+FeedbackTrace,GLM,GLM-5-3 (low),Base,Evidence Location Score,0.460
+FeedbackTrace,GLM,GLM-5-3 (low),EBG,Evidence Hit Rate,0.570
+FeedbackTrace,GLM,GLM-5-3 (low),Base,Evidence Hit Rate,0.510
+FeedbackTrace,Qwen,Luna,EBG,Verification Point Alignment,0.445
+FeedbackTrace,Qwen,Luna,Base,Verification Point Alignment,0.410
+FeedbackTrace,Qwen,Luna,EBG,Evidence Location Score,0.570
+FeedbackTrace,Qwen,Luna,Base,Evidence Location Score,0.545
+FeedbackTrace,Qwen,Luna,EBG,Evidence Hit Rate,0.570
+FeedbackTrace,Qwen,Luna,Base,Evidence Hit Rate,0.530
+FeedbackTrace,Qwen,Flash,EBG,Verification Point Alignment,0.440
+FeedbackTrace,Qwen,Flash,Base,Verification Point Alignment,0.390
+FeedbackTrace,Qwen,Flash,EBG,Evidence Location Score,0.555
+FeedbackTrace,Qwen,Flash,Base,Evidence Location Score,0.460
+FeedbackTrace,Qwen,Flash,EBG,Evidence Hit Rate,0.600
+FeedbackTrace,Qwen,Flash,Base,Evidence Hit Rate,0.540
+FeedbackTrace,Qwen,Pro,EBG,Verification Point Alignment,0.240
+FeedbackTrace,Qwen,Pro,Base,Verification Point Alignment,0.200
+FeedbackTrace,Qwen,Pro,EBG,Evidence Location Score,0.360
+FeedbackTrace,Qwen,Pro,Base,Evidence Location Score,0.345
+FeedbackTrace,Qwen,Pro,EBG,Evidence Hit Rate,0.370
+FeedbackTrace,Qwen,Pro,Base,Evidence Hit Rate,0.340
+FeedbackTrace,Qwen,Terra,EBG,Verification Point Alignment,0.465
+FeedbackTrace,Qwen,Terra,Base,Verification Point Alignment,0.470
+FeedbackTrace,Qwen,Terra,EBG,Evidence Location Score,0.555
+FeedbackTrace,Qwen,Terra,Base,Evidence Location Score,0.590
+FeedbackTrace,Qwen,Terra,EBG,Evidence Hit Rate,0.580
+FeedbackTrace,Qwen,Terra,Base,Evidence Hit Rate,0.540
+FeedbackTrace,Qwen,Sol,EBG,Verification Point Alignment,0.445
+FeedbackTrace,Qwen,Sol,Base,Verification Point Alignment,0.425
+FeedbackTrace,Qwen,Sol,EBG,Evidence Location Score,0.590
+FeedbackTrace,Qwen,Sol,Base,Evidence Location Score,0.540
+FeedbackTrace,Qwen,Sol,EBG,Evidence Hit Rate,0.610
+FeedbackTrace,Qwen,Sol,Base,Evidence Hit Rate,0.550
+FeedbackTrace,Qwen,K3,EBG,Verification Point Alignment,0.460
+FeedbackTrace,Qwen,K3,Base,Verification Point Alignment,0.365
+FeedbackTrace,Qwen,K3,EBG,Evidence Location Score,0.600
+FeedbackTrace,Qwen,K3,Base,Evidence Location Score,0.525
+FeedbackTrace,Qwen,K3,EBG,Evidence Hit Rate,0.610
+FeedbackTrace,Qwen,K3,Base,Evidence Hit Rate,0.550
+FeedbackTrace,Qwen,Sonnet 5,EBG,Verification Point Alignment,0.440
+FeedbackTrace,Qwen,Sonnet 5,Base,Verification Point Alignment,0.300
+FeedbackTrace,Qwen,Sonnet 5,EBG,Evidence Location Score,0.570
+FeedbackTrace,Qwen,Sonnet 5,Base,Evidence Location Score,0.465
+FeedbackTrace,Qwen,Sonnet 5,EBG,Evidence Hit Rate,0.600
+FeedbackTrace,Qwen,Sonnet 5,Base,Evidence Hit Rate,0.480
+FeedbackTrace,Qwen,GLM-5-3 (low),EBG,Verification Point Alignment,0.465
+FeedbackTrace,Qwen,GLM-5-3 (low),Base,Verification Point Alignment,0.390
+FeedbackTrace,Qwen,GLM-5-3 (low),EBG,Evidence Location Score,0.565
+FeedbackTrace,Qwen,GLM-5-3 (low),Base,Evidence Location Score,0.465
+FeedbackTrace,Qwen,GLM-5-3 (low),EBG,Evidence Hit Rate,0.570
+FeedbackTrace,Qwen,GLM-5-3 (low),Base,Evidence Hit Rate,0.510

@@ -1,0 +1,90 @@
+Your task is SilentSwap recovery. The TASK DOCUMENT defines behavior BEFORE
+modification. The numbered CURRENT SOURCE contains the AFTER implementation.
+Find five independent, externally observable semantic substitutions by comparing
+the document with the source. Determine the changes independently from this evidence.
+
+CODE-CORRECT REQUIREMENTS
+
+TO EARN CODE-CORRECT CREDIT, state the COMPLETE BEFORE -> AFTER change.
+Take BEFORE from the full document clause and AFTER from literal source.
+Under the SAME distinguishing trigger, state both concrete operations and
+their returns, exceptions, or state changes. Keep code_change and
+behavioral_effect consistent. Never reverse direction or invent consequences.
+
+REVIEW METHOD
+
+Read all supplied source blocks. File order is alphabetical, not a priority ranking.
+A provided file is not necessarily changed, and one file or function can contain
+multiple independent changes. Each supplied file is complete, with ordinary source
+line numbers. Do not invent code or behavior for files that are not supplied.
+
+For each proposed change, establish:
+1. The exact input, boundary, configuration, or state that distinguishes the behavior.
+2. The complete BEFORE operations and outcome required by the document.
+3. The complete AFTER operations and outcome established by the current source.
+4. Every coordinated operation belonging to that change, including initialization,
+   conditions, fallback branches, return values, exceptions, and state updates.
+
+Always compare in this direction: original document BEFORE -> current code AFTER ->
+semantic difference. Check conditions, validation boundaries, defaults, null/empty
+handling, exceptions, ordering, parsing/matching, state, representation, routing, data
+flow, and dependency selection.
+
+Group by one behavioral rule, not by file or function:
+merge coordinated implementations of one rule and separate independent substitutions.
+Reject guesses, compatible implementations, and documentation omissions alone.
+
+OUTPUT
+
+Return one JSON prediction object matching the supplied schema, with exactly five
+distinct swaps. Do not include action, input_id, benchmark, Markdown, or extra fields.
+Use only supplied source paths and lines for each target. Name the exact lexical
+symbol owner. A property is a method; a top-level assignment is a field. Cite the
+smallest complete responsible ranges, separately for non-contiguous operations.
+The target is your independent conclusion from the source.
+
+Use this prediction structure, repeating the swap object until there are exactly
+five distinct swaps. Every line_ranges item must be an object with integer start
+and end keys, not a two-element array. Follow the complete supplied JSON Schema.
+
+```json
+{
+  "swaps": [
+    {
+      "target": {
+        "file": "exact/repository/path.py",
+        "symbol": {"kind": "function", "qualified_name": ["source_identifier"]},
+        "line_ranges": [{"start": 10, "end": 10}]
+      },
+      "swap_type": "default_null_fallback",
+      "code_change": "complete original operations -> complete current operations",
+      "trigger_condition": "minimal reproducible distinguishing condition",
+      "behavioral_effect": {
+        "before": "complete original documented outcome",
+        "after": "complete current implemented outcome"
+      }
+    }
+  ]
+}
+```
+
+- `code_change`: state both concrete operations in the correct BEFORE -> AFTER direction.
+- `trigger_condition`: the minimal reproducible condition separating the behaviors.
+- `behavioral_effect.before` and `.after`: complete concrete outcomes, not vague impact.
+
+When one swap includes several coordinated changed operations, describe each
+operation's BEFORE -> AFTER contrast under the relevant conditions. Check
+initialization, conditional branches, fallbacks, and subsequent operations for
+missing changes. Include return values, exceptions, and state updates when they
+are part of the difference; do not invent effects or expand into unrelated behavior.
+
+FINAL CHECK
+
+Before returning the prediction, confirm that all five swaps are mutually distinct
+and each pairs a concrete BEFORE rule with literal contradictory AFTER source
+supplied here. Recheck the exact current lines: every AFTER clause must paraphrase
+what the code actually does, not a plausible mutation it could have made.
+Confirm the direction, count, target owner, and smallest responsible line ranges,
+and merge repeated locations of one operation. Verify that no coordinated changed
+operation or concrete BEFORE/AFTER outcome has been omitted. Do not fill slots
+with duplicates or unsupported changes. Return only the prediction JSON.

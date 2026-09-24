@@ -1,0 +1,125 @@
+{
+  "timeout": 600,
+  "models": {
+    "kimi-k3": {
+      "specgap": {
+        "model": "kimi-k3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "KIMI_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/specgap/kimi-k3/manifest.json"
+      },
+      "silentswap": {
+        "model": "kimi-k3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "KIMI_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/silentswap/kimi-k3/stage1/manifest.json"
+      },
+      "feedbacktrace": {
+        "model": "kimi-k3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "KIMI_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/feedbacktrace/kimi-k3/manifest.json"
+      }
+    },
+    "luna": {
+      "specgap": {
+        "model": "gpt-5-6-luna",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GPT_API_KEY",
+        "request_options": {
+          "reasoning_effort": "none"
+        },
+        "source_manifest": "outputs/main/EBG/specgap/gpt5.6/manifest.json"
+      },
+      "silentswap": {
+        "model": "gpt-5-6-luna",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GPT_API_KEY",
+        "request_options": {
+          "reasoning_effort": "none"
+        },
+        "source_manifest": "outputs/main/EBG/silentswap/gpt5.6/stage1/manifest.json"
+      },
+      "feedbacktrace": {
+        "model": "gpt-5-6-luna",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GPT_API_KEY",
+        "request_options": {
+          "reasoning_effort": "none"
+        },
+        "source_manifest": "outputs/main/EBG/feedbacktrace/luna/manifest.json"
+      }
+    },
+    "glm-5-3": {
+      "specgap": {
+        "model": "glm-5-3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GLM53_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/specgap/glm-5-3/manifest.json"
+      },
+      "silentswap": {
+        "model": "glm-5-3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GLM53_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/silentswap/glm-5-3/stage1/manifest.json"
+      },
+      "feedbacktrace": {
+        "model": "glm-5-3",
+        "base_url": "https://your-gateway.example/v1",
+        "api_key_env": "GLM53_API_KEY",
+        "request_options": {
+          "reasoning_effort": "low"
+        },
+        "source_manifest": "outputs/main/EBG/feedbacktrace/glm-5-3/manifest.json"
+      }
+    }
+  },
+  "judges": {
+    "specgap": {
+      "model": "glm-5-2",
+      "base_url": "https://your-gateway.example/v1",
+      "api_key_env": "GLM_API_KEY",
+      "request_options": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
+    },
+    "silentswap": {
+      "model": "glm-5-2",
+      "base_url": "https://your-gateway.example/v1",
+      "api_key_env": "GLM_API_KEY",
+      "request_options": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
+    },
+    "feedbacktrace": {
+      "model": "glm-5.2",
+      "base_url": "https://your-gateway.example/v1",
+      "api_key_env": "GLM_API_KEY",
+      "request_options": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
+    }
+  },
+  "profile_policy": "Reuse the existing per-benchmark model versions and request options."
+}

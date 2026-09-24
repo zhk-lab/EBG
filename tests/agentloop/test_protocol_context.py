@@ -59,7 +59,7 @@ class ProtocolTests(unittest.TestCase):
     def test_default_batch_read_accepts_6_ids_and_rejects_7(self) -> None:
         config = AgentLoopConfig()
         self.assertEqual(config.max_read_ids, 6)
-        self.assertEqual(config.tool_result_budget, 32_768)
+        self.assertEqual(config.tool_result_budget, 65_536)
         self.assertEqual(config.max_atomic_unit_tokens, 65_536)
         accepted_ids = [f"F{number:04d}" for number in range(1, 7)]
         action = parse_action(

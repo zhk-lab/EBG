@@ -1,0 +1,16 @@
+{
+  "dataset_id": "SALT-NLP/SWE-chat",
+  "revision": "REPLACE_WITH_SOURCE_REVISION",
+  "download_date": "YYYY-MM-DD",
+  "restricted_storage": {
+    "relative_path_from_project": "../../data/source/swe-chat"
+  },
+  "files": [
+    {"path": "conversations.parquet", "bytes": null},
+    {"path": "sessions.parquet", "bytes": null},
+    {"path": "checkpoints.parquet", "bytes": null},
+    {"path": "commits.parquet", "bytes": null},
+    {"path": "repositories.parquet", "bytes": null},
+    {"path": "session_logs.parquet", "bytes": null}
+  ]
+}

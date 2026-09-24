@@ -1,8 +1,7 @@
 """Official-compatible SpecGap Judge for saved EBG predictions.
 
 The transport remains outside this module.  The Judge input is reconstructed
-from the frozen EBG sample identity and the original SpecGAP reference files so
-the model receives the same semantic payload as the desktop benchmark.
+from the frozen EBG sample identity and bundled reference annotations.
 """
 
 from __future__ import annotations
@@ -17,8 +16,8 @@ SCHEMA_VERSION = "specgap-eval-1.12"
 SOURCE_EVIDENCE_TYPES = {"implementation", "data_flow", "configuration"}
 MAX_EVIDENCE_LINES = 160
 PROMPT_PATH = Path(__file__).resolve().parents[3] / "prompts" / "judge" / "specgap.txt"
-SPEC_GAP_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_FORMAL_DATA_ROOT = Path.home() / "Desktop" / "SpecGAP" / "SpecGAP"
+SPEC_GAP_ROOT = Path(__file__).resolve().parents[3] / "data/prepared/specgap"
+DEFAULT_FORMAL_DATA_ROOT = SPEC_GAP_ROOT / "artifacts/formal_references"
 
 
 @dataclass(frozen=True)
@@ -281,13 +280,18 @@ def load_gold_conditions(
     *,
     formal_data_root: Path | None = None,
 ) -> list[GoldCondition]:
-    """Load the selected conditions from the original formal reference files."""
+    """Load the frozen reference annotations, preferring the released Gold."""
 
-    sample_root = _formal_sample_root(
-        gold, formal_data_root or DEFAULT_FORMAL_DATA_ROOT
-    )
-    deleted = _read_json(sample_root / "2_deleted_parts.json")["deleted_parts"]
-    mappings = _read_json(sample_root / "4_code_mapping.json")["code_mappings"]
+    reference = gold.get("formal_reference")
+    if reference is not None:
+        deleted = reference["deleted_parts"]
+        mappings = reference["code_mappings"]
+    else:
+        sample_root = _formal_sample_root(
+            gold, formal_data_root or DEFAULT_FORMAL_DATA_ROOT
+        )
+        deleted = _read_json(sample_root / "2_deleted_parts.json")["deleted_parts"]
+        mappings = _read_json(sample_root / "4_code_mapping.json")["code_mappings"]
     deleted_by_id = {str(item["condition_id"]): item for item in deleted}
     items = {
         str(item["condition_id"]): item

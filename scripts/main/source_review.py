@@ -96,7 +96,7 @@ def main(argv=None):
                         help="Use the model's formal SilentSwap EBG stage1/stage2 directories")
     parser.add_argument("--source", type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--artifact-root", type=Path, default=ROOT / "evaluation/silentswap/artifacts")
+    parser.add_argument("--artifact-root", type=Path, default=ROOT / "data/prepared/silentswap/artifacts")
     parser.add_argument("--ids", nargs="+")
     parser.add_argument("--workers", type=int, help="Concurrency; resume saved value or use 25")
     parser.add_argument("--timeout", type=float, default=600)
@@ -111,12 +111,12 @@ def main(argv=None):
     if args.experiment:
         if args.source or args.output:
             parser.error("--experiment cannot be combined with --source or --output")
-        experiment = ROOT / "experiments/EBG/silentswap" / args.experiment
+        experiment = ROOT / "outputs/main/EBG/silentswap" / args.experiment
         args.source, args.output = experiment / "stage1", experiment / "stage2"
         if args.experiment == "deepseek_flash" and not (args.judge or args.aggregate) and args.model is None:
             args.model = "deepseek-flash"
     if args.source is None:
-        args.source = ROOT / "experiments/EBG/silentswap/terra/stage1"
+        args.source = ROOT / "outputs/main/EBG/silentswap/terra/stage1"
     if args.output is None:
         parser.error("provide --experiment or --output")
     if args.workers is None:

@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "Please cite the accompanying paper. Author metadata will be updated after anonymous review."
+type: software
+title: "EBG: Evidence-Grounded Behavior Graph"
+authors:
+  - name: Anonymous authors
+version: 0.1.0
+license: MIT
