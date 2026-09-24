@@ -9,8 +9,8 @@ Each component contributes 100 examples to the paper.
 | [FeedbackTrace](feedbacktrace/README.md) | SWE-chat | Annotate decisions visible before subsequent user feedback |
 
 The benchmark is publicly available on
-[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
-Its pinned revision is recorded in [dataset.yaml](dataset.yaml). See the
+[Google Drive](https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link).
+Its download location is recorded in [dataset.yaml](dataset.yaml). See the
 [dataset card](dataset_card.md) for contents and download instructions.
 Only the 100 KEY FeedbackTrace examples are in scope. Downloaded data belongs
 under the ignored root `data/` directory or an explicitly supplied local path.

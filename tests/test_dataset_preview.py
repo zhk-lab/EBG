@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.export_dataset_preview import make_row, repository_tree
+from scripts.export_dataset_preview import make_row, repository_tree, render_location, session_trace
 
 
 class DatasetPreviewTests(unittest.TestCase):
@@ -59,7 +59,9 @@ class DatasetPreviewTests(unittest.TestCase):
                          {'verification_point': 'Confirm.', 'evidence_ids': ['e_2'],
                           'criticality': 'must_disclose', 'target_user_feedback': 'SECRET_TARGET'})
             row = make_row(root, 'feedbacktrace', 'ft_001_long')
-            self.assertGreater(len(row['trace']), 5000)
+            self.assertEqual(row['trace'][0]['type'], 'session')
+            self.assertEqual(len(row['trace'][1]['message']['content']), 5000)
+            self.assertEqual(row['trace'][2]['message']['role'], 'assistant')
             self.assertIn('Turn 2 | Assistant | e_2', row['evidence'])
             self.assertNotIn('SECRET_TARGET', str(row))
             self.assertEqual(row['criticality'], 'must_disclose')
@@ -68,6 +70,28 @@ class DatasetPreviewTests(unittest.TestCase):
     def test_tree_only_contains_visible_repository_files(self):
         tree = repository_tree(['documents/task.md', 'repository/src/a.py', 'repository/README.md'])
         self.assertEqual(tree, 'repository/\n|-- src/\n|   `-- a.py\n`-- README.md')
+
+    def test_location_is_readable(self):
+        self.assertEqual(render_location({'file': 'a.py',
+                         'symbol': {'qualified_name': ['A', 'run']},
+                         'line_ranges': [{'start': 2, 'end': 5}]}),
+                         'a.py:2-5 -> A.run')
+
+    def test_tool_calls_and_results_remain_linked(self):
+        events = [{'event_type': 'tool_exchange', 'turn_number': 4, 'evidence_id': 'e4',
+                   'content': 'Tool invocation:\n{"tool_name":"Read","input":{"path":"a.py"}}\n\nTool result: Read\ncontents'}]
+        records = session_trace('ft_test', events)
+        call, result = records[1]['message'], records[2]['message']
+        self.assertEqual(call['toolCalls'][0]['id'], result['toolCallId'])
+        self.assertEqual(json.loads(call['toolCalls'][0]['function']['arguments']), {'path': 'a.py'})
+        self.assertEqual(result['content'], ' Read\ncontents')
+        self.assertEqual(records[2]['evidence_id'], 'e4')
+
+    def test_incomplete_tool_event_is_not_invented(self):
+        event = {'event_type': 'tool_exchange', 'content': 'Tool invocation:\n{"unfinished":'}
+        records = session_trace('ft_test', [event])
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[1]['message']['content'], event['content'])
 
 
 if __name__ == '__main__':

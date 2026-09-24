@@ -1,9 +1,13 @@
 name: AgentMonBench
-huggingface:
-  repo_id: ZhaoHongKang/AgentMonBench
-  revision: e8c0c1c3a7d0ec7aba773c4d00062df48130c382
-  url: https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench
+google_drive:
+  url: https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link
   status: public
+  files:
+    - specgap.tar.gz
+    - silentswap.tar.gz
+    - feedbacktrace.tar.gz
+    - samples.json
+    - README.md
 components:
   specgap:
     examples: 100

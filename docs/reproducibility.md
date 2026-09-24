@@ -5,25 +5,27 @@ Install the package as described in the [README](../README.md).
 
 ## Dataset release
 
-The Hugging Face URL and immutable revision are recorded in
+The Google Drive download location is recorded in
 [dataset.yaml](../benchmarks/dataset.yaml). The dataset is publicly available on
-[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
+[Google Drive](https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link).
 The authoritative release is the
 frozen EBG evaluation set listed in
 [samples.json](../experiments/main/configs/samples.json).
 Construction projects provide builders; their current generated samples are
 not interchangeable with the frozen evaluation set.
 
-Install `huggingface_hub`, then download the pinned release (no login required):
+Open the Google Drive folder above and download `specgap.tar.gz`,
+`silentswap.tar.gz`, `feedbacktrace.tar.gz`, and `samples.json` into
+`data/agentmonbench/` (no login required). If Drive bundles the download as a
+ZIP, unpack that ZIP first. Then extract the three archives:
 
 ```bash
-hf download ZhaoHongKang/AgentMonBench --repo-type dataset --revision e8c0c1c3a7d0ec7aba773c4d00062df48130c382 --local-dir data/agentmonbench
 python -m tarfile -e data/agentmonbench/specgap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/silentswap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/feedbacktrace.tar.gz data/agentmonbench
 ```
 
-The download has this structure:
+After extraction, the data has this structure:
 
 ```text
 agentmonbench/

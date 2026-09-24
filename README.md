@@ -12,8 +12,8 @@ consequential decisions and locate supporting evidence.
 **AgentMonBench** contains SpecGAP, SilentSwap, and FeedbackTrace, with 100
 examples each. The main experiments use the 100 KEY FeedbackTrace Long inputs.
 The benchmark is publicly available on
-[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench),
-including complete evaluation data and browsable sample previews.
+[Google Drive](https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link),
+including complete evaluation inputs, Gold annotations, and the sample list.
 
 | Start here | Purpose |
 | --- | --- |
@@ -53,9 +53,9 @@ and saves the result under `outputs/demo/`.
 ## Data and experiments
 
 Download the public benchmark from
-[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
+[Google Drive](https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link).
 The release contains three archives (100 samples each), separate evaluation
-annotations, and Data Studio preview tables. The pinned dataset revision is in
+annotations, and the sample list. The download location is in
 [dataset.yaml](benchmarks/dataset.yaml); the
 [dataset card](benchmarks/dataset_card.md) describes the files.
 Large datasets and raw runs are excluded from Git. This repository contains

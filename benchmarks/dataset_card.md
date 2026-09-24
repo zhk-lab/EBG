@@ -1,28 +1,3 @@
----
-language:
-- en
-size_categories:
-- n<1K
-tags:
-- agent-evaluation
-- code
-- agent-oversight
-pretty_name: AgentMonBench
-configs:
-- config_name: specgap
-  data_files:
-  - split: test
-    path: preview/specgap.jsonl
-- config_name: silentswap
-  data_files:
-  - split: test
-    path: preview/silentswap.jsonl
-- config_name: feedbacktrace
-  data_files:
-  - split: test
-    path: preview/feedbacktrace.jsonl
----
-
 # AgentMonBench
 
 AgentMonBench evaluates whether a monitor identifies consequential decisions
@@ -48,41 +23,8 @@ the exact released IDs.
 
 ## Files
 
-### Browse in Data Studio
-
-Select `specgap`, `silentswap`, or `feedbacktrace`, then the `test` split.
-Each subset has 100 rows, one per evaluation input. Documents and traces are
-complete in the preview files; the web interface may abbreviate long cells.
-
-| Subset | Input columns | Gold columns (scoring references only) |
-| --- | --- | --- |
-| SpecGAP | `id`, `document`, `repository_tree` | `missing_requirements`, `evidence` |
-| SilentSwap | `id`, `document`, `repository_tree` | `semantic_changes`, `evidence` |
-| FeedbackTrace | `id`, `trace` | `verification_point`, `evidence`, `criticality` |
-
-- **SpecGAP:** `missing_requirements` lists the omitted requirements.
-  Matching condition IDs link each requirement to implementation and test
-  locations in `evidence`.
-- **SilentSwap:** `semantic_changes` combines the expected behavior, changed
-  behavior, and annotated impact. Matching change numbers link each item to
-  code locations and supporting evidence.
-- **FeedbackTrace:** `trace` preserves the chronological pre-feedback events,
-  with turn numbers, roles, tool names when available, and evidence IDs.
-  `verification_point` is the annotated decision to disclose or confirm;
-  `evidence` contains the referenced visible events; `criticality` retains the
-  original annotation label. Target user feedback is not included in the trace.
-
-All Gold columns are evaluation answers, **not monitor inputs**. They are
-extracted from the frozen annotations without generating new answers.
-Repository trees list only manifest-visible files. The code benchmarks also
-require the repository contents in the archives; the tables do not replace
-these complete inputs. The archives keep visible inputs and Gold separate.
-
-To regenerate the browsing tables from an unpacked release:
-
-```bash
-python -m scripts.export_dataset_preview --source data/prepared --output data/hf_preview_update/preview
-```
+The complete evaluation release is available on [Google Drive](https://drive.google.com/drive/folders/1_xWCQDQUYEFxZ2yxF8uenkTpysUl4Des?usp=drive_link).
+The folder contains the three archives below, `samples.json`, and a README.
 
 ### Download complete inputs
 
@@ -106,10 +48,11 @@ by the scorer, never provided to the monitor. SpecGAP Gold includes the frozen
 
 ## Download and reproduce
 
-Install `huggingface_hub` and use the dataset commit ID shown in the Hub history:
+Download the three `.tar.gz` files and `samples.json` from the Google Drive
+folder into `data/agentmonbench/`. If downloaded together as a ZIP, unpack it
+first. Run these commands from the EBG repository root:
 
 ```bash
-hf download ZhaoHongKang/AgentMonBench --repo-type dataset --revision COMMIT_ID --local-dir data/agentmonbench
 python -m tarfile -e data/agentmonbench/specgap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/silentswap.tar.gz data/agentmonbench
 python -m tarfile -e data/agentmonbench/feedbacktrace.tar.gz data/agentmonbench
