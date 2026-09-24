@@ -10,7 +10,8 @@ directory, since older commits include raw session records.
 
 ## Pending metadata
 
-- Hugging Face URL and frozen dataset revision.
+- Final dataset terms; the public Hugging Face release and pinned revision
+  are recorded in `benchmarks/dataset.yaml`.
 - Public paper URL and author information after anonymous review.
 - External locations for complete paired harness case records.
 

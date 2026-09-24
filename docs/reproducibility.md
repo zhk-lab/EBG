@@ -5,12 +5,23 @@ Install the package as described in the [README](../README.md).
 
 ## Dataset release
 
-The Hugging Face URL and immutable revision are pending in
-[dataset.yaml](../benchmarks/dataset.yaml). The authoritative release is the
+The Hugging Face URL and immutable revision are recorded in
+[dataset.yaml](../benchmarks/dataset.yaml). The dataset is publicly available on
+[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
+The authoritative release is the
 frozen EBG evaluation set listed in
 [samples.json](../experiments/main/configs/samples.json).
 Construction projects provide builders; their current generated samples are
 not interchangeable with the frozen evaluation set.
+
+Install `huggingface_hub`, then download the pinned release (no login required):
+
+```bash
+hf download ZhaoHongKang/AgentMonBench --repo-type dataset --revision 3bf50f6271fd2dc164c5fdabefd84d363eb088f2 --local-dir data/agentmonbench
+python -m tarfile -e data/agentmonbench/specgap.tar.gz data/agentmonbench
+python -m tarfile -e data/agentmonbench/silentswap.tar.gz data/agentmonbench
+python -m tarfile -e data/agentmonbench/feedbacktrace.tar.gz data/agentmonbench
+```
 
 The download has this structure:
 

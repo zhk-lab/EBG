@@ -7,8 +7,13 @@ EBG is a training-free method that organizes source-linked evidence into
 behaviors, scopes, and relations. Task-oriented views help a monitor identify
 consequential decisions and locate supporting evidence.
 
+![Overview of the EBG method](asset/ebg_method.png)
+
 **AgentMonBench** contains SpecGAP, SilentSwap, and FeedbackTrace, with 100
 examples each. The main experiments use the 100 KEY FeedbackTrace Long inputs.
+The benchmark is publicly available on
+[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench),
+including complete evaluation data and browsable sample previews.
 
 | Start here | Purpose |
 | --- | --- |
@@ -47,9 +52,15 @@ and saves the result under `outputs/demo/`.
 
 ## Data and experiments
 
-The Hugging Face URL and frozen revision are **pending publication**; see
-[dataset.yaml](benchmarks/dataset.yaml). Large datasets and raw runs are not
-included in Git. See [reproduction instructions](docs/reproducibility.md) for
+Download the public benchmark from
+[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
+The release contains three archives (100 samples each), separate evaluation
+annotations, and Data Studio preview tables. The pinned dataset revision is in
+[dataset.yaml](benchmarks/dataset.yaml); the
+[dataset card](benchmarks/dataset_card.md) describes the files.
+Large datasets and raw runs are excluded from Git. This repository contains
+the benchmark construction code and EBG implementation.
+See [reproduction instructions](docs/reproducibility.md) for
 local data preparation and model runs. Copy `.env.example` to `.env` and supply
 your endpoint, model IDs, and credentials when running prediction or judging.
 Using the released data does not require rerunning benchmark construction.
@@ -58,6 +69,7 @@ Using the released data does not require rerunning benchmark construction.
 
 ```text
 benchmarks/     Dataset builders, construction prompts, review procedures
+asset/          Method figure and README assets
 src/           EBG, AgentLoop, TraceReview, RepoGraph, evaluation utilities
 evaluation/    Benchmark-specific judges
 prompts/       Prediction and judging prompts
@@ -74,9 +86,8 @@ outputs/       Local generated files and runs (ignored)
 
 ## Citation and license
 
-The paper is under anonymous review. [CITATION.cff](CITATION.cff) contains
-provisional software metadata; author and paper-link fields will be updated
-for the public release.
+The paper is under anonymous review. Author information and the final paper
+citation will be added after review.
 
 Code is released under the [MIT License](LICENSE). Upstream datasets and
 repository snapshots retain their own access conditions and licenses.

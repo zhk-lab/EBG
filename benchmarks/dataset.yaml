@@ -1,8 +1,9 @@
 name: AgentMonBench
 huggingface:
-  repo_id: null
-  revision: null
-  url: null
+  repo_id: ZhaoHongKang/AgentMonBench
+  revision: 3bf50f6271fd2dc164c5fdabefd84d363eb088f2
+  url: https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench
+  status: public
 components:
   specgap:
     examples: 100

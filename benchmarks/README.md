@@ -8,7 +8,10 @@ Each component contributes 100 examples to the paper.
 | [SilentSwap](silentswap/README.md) | DeNovoSWE | Introduce five semantic substitutions while preserving existing tests |
 | [FeedbackTrace](feedbacktrace/README.md) | SWE-chat | Annotate decisions visible before subsequent user feedback |
 
-The Hugging Face release URL and revision are pending; see [dataset.yaml](dataset.yaml).
+The benchmark is publicly available on
+[Hugging Face](https://huggingface.co/datasets/ZhaoHongKang/AgentMonBench).
+Its pinned revision is recorded in [dataset.yaml](dataset.yaml). See the
+[dataset card](dataset_card.md) for contents and download instructions.
 Only the 100 KEY FeedbackTrace examples are in scope. Downloaded data belongs
 under the ignored root `data/` directory or an explicitly supplied local path.
 
