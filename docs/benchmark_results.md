@@ -2,7 +2,7 @@
 
 更新日期：2026-09-14。
 
-以下评分表均为 **EBG / baseline / RepoGraph**，每项较高值加粗，每组 100 题。
+SpecGap、SilentSwap 评分按 **EBG / baseline / RepoGraph** 排列；FeedbackTrace 按 **EBG / baseline** 排列，不使用 RepoGraph。每项最高值加粗（并列均加粗），每组 100 题。GLM / Qwen 表示评分 judge。
 
 SilentSwap 的原有七个模型为分阶段汇总：前两项使用最新第一阶段结果，`Code Correct` 沿用已选定的第二阶段结果，未重新串跑。
 
@@ -94,7 +94,8 @@ Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-
 
 - GLM-5-3：`main_experiments/<EBG 或 baseline>/<benchmark>/glm-5-3/`；SilentSwap 使用 EBG 目录中 `summary.json` 的正式两阶段合并结果。
 
-- SpecGap、FeedbackTrace 及各 benchmark 的 baseline：`main_experiments/baseline/<benchmark>/<model>/summary.json`。
+- SpecGap、FeedbackTrace：`main_experiments/<EBG 或 baseline>/<benchmark>/<model>/summary.json`；各 benchmark 的 baseline 均位于对应的 `baseline` 目录。
+- RepoGraph（仅 SpecGap、SilentSwap）：`main_experiments/repograph/<benchmark>/<model>/RepoGraph/summary.json`。
 - SilentSwap 最新第一阶段（七个已有完整评分的模型）：`main_experiments/EBG/silentswap/<model>/stage1/`。2026-09-12已从回收站恢复逐题答案及两套Judge评分，正式目录与本表一致。
 - SilentSwap 分阶段合并评分：`main_experiments/EBG/silentswap/<model>/stage2/combined/<judge>/summary.json`，前两项已更新为恢复后的第一阶段，第二阶段没有重新串跑。
 - SilentSwap 第二阶段已选定分数：`main_experiments/EBG/silentswap/<model>/summary.json` 中的 `code_change_correct`。
@@ -112,36 +113,36 @@ Flash 的上述三组正式结果已按要求恢复旧版历史记录；2026-09-
 
 | 模型 | EBG | baseline |
 |---|---:|---:|
-| Luna | 56,251.5 / 0.293 | 44,167.6 / 0.120 | / 0.190 |
-| Flash | 104,354.0 / 0.344 | 89,655.5 / 0.200 | / 0.190 |
-| Pro | 110,028.6 / 0.281 | 84,830.3 / 0.125 | / 0.075 |
-| Terra | 63,167.5 / 0.415 | 48,686.7 / 0.270 | / 0.425 |
-| Sol | 57,605.4 / 0.459 | 38,090.8 / 0.260 | / 0.475 |
-| K3 | 53,641.8 / 0.406 | 45,293.6 / 0.275 | / 0.535 |
-| Sonnet 5 | 79,067.4 / N/A | 76,483.1 / N/A | / N/A |
+| Luna | 56,251.5 | 44,167.6 |
+| Flash | 104,354.0 | 89,655.5 |
+| Pro | 110,028.6 | 84,830.3 |
+| Terra | 63,167.5 | 48,686.7 |
+| Sol | 57,605.4 | 38,090.8 |
+| K3 | 53,641.8 | 45,293.6 |
+| Sonnet 5 | 79,067.4 | 76,483.1 |
 
 ### SilentSwap
 
 | 模型 | EBG | baseline |
 |---|---:|---:|
-| Luna | 78,391.2 / 0.293 | 60,200.6 / 0.120 | / 0.190 |
-| Flash | 111,747.7 / 0.344 | 91,772.6 / 0.200 | / 0.190 |
-| Pro | 144,145.2 / 0.281 | 101,328.9 / 0.125 | / 0.075 |
-| Terra | 84,107.9 / 0.415 | 58,354.1 / 0.270 | / 0.425 |
-| Sol | 80,046.8 / 0.459 | 51,970.7 / 0.260 | / 0.475 |
-| K3 | 90,140.2 / 0.406 | 58,091.2 / 0.275 | / 0.535 |
-| Sonnet 5 | 222,266.0 / N/A | 136,827.7 / N/A | / N/A |
+| Luna | 78,391.2 | 60,200.6 |
+| Flash | 111,747.7 | 91,772.6 |
+| Pro | 144,145.2 | 101,328.9 |
+| Terra | 84,107.9 | 58,354.1 |
+| Sol | 80,046.8 | 51,970.7 |
+| K3 | 90,140.2 | 58,091.2 |
+| Sonnet 5 | 222,266.0 | 136,827.7 |
 
 ### FeedbackTrace
 
 | 模型 | EBG | baseline |
 |---|---:|---:|
-| Luna | 65,606.7 / 0.293 | 67,664.8 / 0.120 | / 0.190 |
-| Flash | 68,387.6 / 0.344 | 70,707.9 / 0.200 | / 0.190 |
-| Pro | 68,339.4 / 0.281 | 70,679.0 / 0.125 | / 0.075 |
-| Terra | 65,604.3 / 0.415 | 67,662.1 / 0.270 | / 0.425 |
-| Sol | 65,609.7 / 0.459 | 67,665.3 / 0.260 | / 0.475 |
-| K3 | 64,712.9 / 0.406 | 66,777.6 / 0.275 | / 0.535 |
-| Sonnet 5 | 108,625.2 / N/A | 110,951.5 / N/A | / N/A |
+| Luna | 65,606.7 | 67,664.8 |
+| Flash | 68,387.6 | 70,707.9 |
+| Pro | 68,339.4 | 70,679.0 |
+| Terra | 65,604.3 | 67,662.1 |
+| Sol | 65,609.7 | 67,665.3 |
+| K3 | 64,712.9 | 66,777.6 |
+| Sonnet 5 | 108,625.2 | 110,951.5 |
 
 统计来源：各预测目录的 `runs/*/batch_result.json`；存在重试时，使用最终成功状态中的有效调用记录及对应 response 用量，排除失败调用。
