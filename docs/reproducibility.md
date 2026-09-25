@@ -110,8 +110,7 @@ their original absolute paths and should be treated as archived records.
 
 The [experiment index](../experiments/README.md) maps analyses to paper outputs.
 Generated reports go under `outputs/`, while compact reviewed exports belong
-under `results/`. The [release notes](release_notes.md) list pending metadata and
-paper/table revision alignment.
+under `results/`. The [release notes](release_notes.md) list pending metadata.
 
 ## Offline checks
 

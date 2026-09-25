@@ -27,7 +27,7 @@ Run commands from the repository root. See the full
 Each prediction batch saves its settings, selected IDs, prompts, responses,
 completion state, and usage. Judging adds separate results for each judge model.
 Rerunning the same command resumes completed samples; changed settings require
-a new output directory. The public tables retain their existing values in
+a new output directory. Paper results are available in
 [benchmark_results.md](../../docs/benchmark_results.md).
 
 Large historical runs live locally under `outputs/main/`. New runs should use

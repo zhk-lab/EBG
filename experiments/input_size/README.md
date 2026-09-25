@@ -19,7 +19,6 @@ change; omit analysis `--resume` when source scores change. Outputs are under
 
 The plots and reports distinguish medians, group means, relative gains, and
 absolute-difference slopes. Natural associations are not causal difficulty
-effects. Historical stage and scoring revisions remain documented in
-[release notes](../../docs/release_notes.md).
+effects.
 
 Offline tests: `python -m unittest discover -s experiments/input_size/scripts -p "test_*.py" -q`.

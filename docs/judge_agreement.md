@@ -4,8 +4,7 @@ Scores are sample means, ranked in descending order at the precision stored in
 the summaries and displayed to three decimal places. Spearman rho is the Pearson
 correlation of the ranks, using average ranks for ties. This measures agreement
 in model rankings, not agreement on individual judgments. A correlation of one
-does not imply equal scores. Numeric records retain their original revision;
-see [release notes](release_notes.md).
+does not imply equal scores.
 
 ## Spearman rank correlation
 
