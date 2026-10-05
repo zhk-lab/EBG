@@ -29,7 +29,7 @@ class RetrievalPriorityTests(unittest.TestCase):
             'def local(jobs, config):\n    rng = random.Random(config["seed"])\n'
             '    return [rng.random() for job in jobs]\n', encoding='utf-8')
         report = {f'metric_{i}': list(range(20)) for i in range(24)}
-        (self.repo / 'a_results.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+        (self.repo / 'a_results.json').write_text(json.dumps(report, indent=2), encoding='utf-8', newline='\n')
         demand = 'Compare `a_results.json` with `engine.py`, `queued`, and `local`.'
         (self.repo / 'PLAN.md').write_text(demand, encoding='utf-8')
         self.harness.sessions.start('s', 't', str(self.repo), demand)
@@ -54,11 +54,16 @@ class RetrievalPriorityTests(unittest.TestCase):
         self.assertIn('def local', text)
         self.assertIn('random.Random(config["seed"])', text)
         report_entry = next(e for e in first if e.get('node') == 'a_results.json::<file>')
+        # Force text pagination independently of platform newline token counts.
+        self.harness.token_budget = 256
         report_page = yaml.safe_load(self.harness.pages.read(owner, report_entry['content_ref']))
         self.assertIn('metric_0', report_page['content'])
         self.assertIn('next', report_page)
-        tail = yaml.safe_load(self.harness.pages.read(owner, report_entry['content_ref'], report_page['next']['offset']))
-        self.assertIn('metric_23', tail['content'])
+        chunks = [report_page['content']]
+        while 'next' in report_page:
+            report_page = yaml.safe_load(self.harness.pages.read(owner, report_page['next']['read_ref'], report_page['next']['offset']))
+            chunks.append(report_page['content'])
+        self.assertEqual(''.join(chunks), (self.repo / 'a_results.json').read_bytes().decode('utf-8'))
 
     def test_agent_report_and_read_command_are_not_execution_hints(self):
         (self.repo / 'engine.py').write_text(

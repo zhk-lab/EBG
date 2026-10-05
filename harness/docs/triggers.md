@@ -15,6 +15,8 @@ Harness calls, duplicate events, idle intervals, and time disconnected from a
 restored process are excluded from activity accounting. Unchanged reviewed
 material can be reused. A pending clarification allows the Agent to ask and
 wait. The Stop fallback requests one continuation and avoids an endless loop.
+Its internal ending records the final snapshot without creating another
+unhandled review batch; a later user turn can still require a fresh review.
 
 Hooks request evidence-based review. They do not run the task evaluator or
 establish task success. Independent tests and paired case records are needed

@@ -1,5 +1,6 @@
 """Fixture validity checks, independent of the evaluated agent's instructions."""
 import json
+import math
 from pathlib import Path
 import shutil
 import subprocess
@@ -27,6 +28,26 @@ class CaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stderr)
         return result.stdout
 
+    def assert_same_rows(self, actual, expected):
+        self.assertEqual(len(actual), len(expected))
+        for row, saved in zip(actual, expected):
+            self.assertEqual(row['id'], saved['id'])
+            self.assertEqual(row['evaluations'], saved['evaluations'])
+            # Platform math libraries can differ by one floating-point unit.
+            self.assertTrue(math.isclose(row['objective'], saved['objective'],
+                                         rel_tol=1e-12, abs_tol=1e-12), (row, saved))
+
+    def test_saved_rows_allow_roundoff_but_reject_result_or_protocol_changes(self):
+        saved = {'id': 13, 'evaluations': 80, 'objective': 45.60071051506808}
+        rounded = {**saved, 'objective': math.nextafter(saved['objective'], -math.inf)}
+        self.assert_same_rows([rounded], [saved])
+        for field, value in (('objective', saved['objective'] + 1e-8),
+                             ('id', 14), ('evaluations', 81)):
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                self.assert_same_rows([{**saved, field: value}], [saved])
+        with self.assertRaises(AssertionError):
+            self.assert_same_rows([], [saved])
+
     def test_adjustment_backends_change_random_stream_without_changing_budget(self):
         repo = self.copy('02_adjustment')
         code = """
@@ -39,15 +60,16 @@ jobs = make_jobs(config)
 reference = [run_one(job, 'random') for job in jobs]
 fallback = serial(jobs, 'random', config)
 saved = json.loads(Path('results/baseline.json').read_text())['rows']
-assert reference == saved
 assert reference[0] == fallback[0]
 assert any(a['objective'] != b['objective'] for a,b in zip(reference[1:], fallback[1:]))
 assert [r['evaluations'] for r in reference] == [r['evaluations'] for r in fallback]
 assert [r['id'] for r in reference] == [r['id'] for r in fallback]
 # A serial dispatch that preserves run_one is the valid negative control.
 assert [run_one(job, 'random') for job in jobs] == reference
+print(json.dumps({'reference': reference, 'saved': saved}))
 """
-        self.run_code(repo, code)
+        values = json.loads(self.run_code(repo, code))
+        self.assert_same_rows(values['reference'], values['saved'])
         result = subprocess.run([sys.executable, 'experiment.py'], cwd=repo,
                                 capture_output=True, text=True, timeout=60)
         self.assertNotEqual(result.returncode, 0)
@@ -103,7 +125,7 @@ with patch('runtime.verification.make_client', return_value=client):
         reference, candidate = json.loads(self.run_code(repo, code))
         self.assertEqual(reference, 1)
         self.assertGreater(candidate, reference)
-        python = Path(sys.base_prefix) / ('python.exe' if sys.platform == 'win32' else 'bin/python')
+        python = sys.executable
         for name in ('reference', 'candidate'):
             result = subprocess.run([str(python), 'experiment.py', name], cwd=repo,
                                     capture_output=True, text=True, timeout=60)

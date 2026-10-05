@@ -33,6 +33,8 @@ Research conclusions require actual execution, verification of the intended beha
 
 When disclosure is needed, explain **what was actually completed and what material limitations remain**. Use `result`. Describe repaired issues according to the final state and avoid repeating resolved or unchanged findings.
 
+If review finds a material error in a requested report or other deliverable, correct that artifact within the authorized task and inspect its saved contents before concluding. A recommendation in `ebg_record` or a caveat in the final answer does not correct the delivered artifact. If correction needs a user decision or unavailable evidence, state that it remains unresolved.
+
 If a consequential requirement remains ambiguous or an approach change still needs authorization, return to the process review in `ebg-ambiguity` and clarify it before final adoption. Reporting a limitation does not settle a pending user choice.
 
 ## Evidence workflow
