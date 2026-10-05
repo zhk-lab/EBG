@@ -66,4 +66,6 @@ Offline fixture checks:
 python -m unittest discover -s harness/case_studies -p "test_*.py" -q
 ```
 
+See the [2026-10-05 Luna Light validation](luna_light_results.md) for current runs, repairs, and remaining limits. These are separate from the paper's historical results.
+
 See [provenance](provenance.md) for the source mechanisms behind these cases.
