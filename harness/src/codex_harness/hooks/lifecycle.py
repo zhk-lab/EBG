@@ -23,11 +23,11 @@ def _context(name: str, message: str) -> dict[str, Any]:
 
 def _execution_plan(prompt: str) -> str | None:
     """Recognize explicit execution requests only; ambiguous intent stays with the agent."""
-    if re.match(r'\s*(?:please\s+|请)?(?:explain\b|describe\b|review\b|summarize\b|解释|评审|总结|讨论)', prompt, re.I):
+    if re.match(r'\s*(?:please\s+|请)?(?:explain\b|describe\b|review\b|summarize\b|complete\b\s+(?:(?:a|an|the)\s+)?(?:review|summary|description|explanation)\b|解释|评审|总结|讨论)', prompt, re.I):
         return None
-    if re.search(r'(?:不要|不必|do not|don.t)\s*(?:执行|implement|execute|follow)', prompt, re.I):
+    if re.search(r'(?:不要|不必|do not|don.t)\s*(?:执行|implement|execute|follow|complete)', prompt, re.I):
         return None
-    if not re.search(r'(?:执行|按照|按|落实|\bimplement\b|\bexecute\b|\bfollow\b)[^\n。]{0,100}(?:plan|计划|方案|\.md\b)', prompt, re.I):
+    if not re.search(r'(?:执行|按照|按|落实|\bimplement\b|\bexecute\b|\bfollow\b|\bcomplete\b)[^\n。]{0,100}(?:plan|计划|方案|\.md\b)', prompt, re.I):
         return None
     paths = re.findall(r'[\w./\\-]+\.(?:md|markdown)\b', prompt, re.I)
     return paths[0] if paths else '@context'
@@ -59,7 +59,7 @@ def _plan_check(harness: Harness, plan: str, event_ids: list[str] | None=None) -
     with runtime(harness.store, session) as state:
         state['plan_checks'][plan] = {'content': content, 'request': request, 'check_id': check['id']}
         state['plan_seen'] = True
-    return _context('PostToolUse', f'EBG: use ebg-review. Read ebg_review(check_id="{check['id']}") and use ebg_evidence to verify goals and implementation assumptions. Expand materials as needed and finish the review before implementing the plan. If a user choice is required, record ebg_record(waiting_for_user=true) and ask immediately.')
+    return _context('PostToolUse', f'EBG: use ebg-review. Read ebg_review(check_id="{check["id"]}") and use ebg_evidence to verify goals and implementation assumptions. Expand materials as needed and finish the review before implementing the plan. If a user choice is required, record ebg_record(waiting_for_user=true) and ask immediately.')
 
 
 def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
@@ -104,7 +104,7 @@ def handle_hook(harness: Harness, payload: dict[str, Any]) -> dict[str, Any]:
         if tool.rsplit('__', 1)[-1].startswith('ebg_'):
             return {}
         original_id = payload['tool_use_id']
-        call_id = f'{turn['number']}:{original_id}'
+        call_id = f'{turn["number"]}:{original_id}'
         event = {'kind': 'tool_call', 'call_id': call_id, 'original_call_id': original_id, 'tool_name': tool, 'content': _content(payload['tool_input'])}
         log.append(session, turn['turn_id'], event, f'call:{original_id}')
         if name == 'PostToolUse':
@@ -152,15 +152,17 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
     triggers = [stage for stage, needed in (('adjustment', adjustment_needed), ('result', result_needed)) if needed]
     reason = None
     internal = bool(payload.get('stop_hook_active')) or any((e.get('internal') for e in log.events(session) if e['turn_id'] == turn['turn_id']))
+    if internal:
+        # Only one Stop continuation is allowed. Preserve its actual ending state
+        # without creating another review batch that the agent cannot execute.
+        log.stop(session, turn['turn_id'], payload.get('last_assistant_message'))
+        return {}
     if not waiting and triggers:
         events = log.events(session)
         signature = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'} or (e['kind'] == 'user' and (not e.get('internal')))]
         files, notes, missing = capture(harness.store, log.root(session), max_file_bytes=harness.max_file_bytes, session_id=session)
         key = {'events': signature, 'files': files, 'missing': missing, 'notes': notes, 'observations': observations, 'triggers': triggers}
-        if not internal:
-            key['claim'] = payload.get('last_assistant_message', '')
-        elif batch:
-            key['claim'] = batch['key'].get('claim', '')
+        key['claim'] = payload.get('last_assistant_message', '')
         if not batch or batch['key'] != key:
             ids = [e['id'] for e in events if e['kind'] in {'tool_call', 'tool_result'}]
             focuses = {'adjustment': 'Review experimental adjustments, fallback reasons, and comparability for this session.', 'result': key.get('claim') or 'Review experimental results, verification, and attribution of improvements.'}
@@ -168,7 +170,7 @@ def _stop(harness: Harness, payload: dict[str, Any], turn: dict[str, Any]) -> di
             with runtime(harness.store, session) as state:
                 state['batch'] = batch
         pending = [identifier for identifier in batch['checks'] if not harness.checks.get(identifier)['assessment']]
-        if pending and (not payload.get('stop_hook_active')) and (not internal):
+        if pending:
             reason = 'EBG autoresearch: before completion, review in order: ' + '、'.join(pending) + '. For each item call ebg_review(check_id=...), inspect code, data, and execution evidence with ebg_evidence, then save ebg_record. Check only triggered stages, adjustment before result when both apply. The final response must answer the original experimental task, explain whether its goal was met, and state retained or reverted choices, supporting evidence, and limitations. Do not respond only with internal check IDs or completion notices. This is a system continuation reminder, not a new user requirement.'
             for identifier in batch['checks']:
                 check = harness.checks.get(identifier)

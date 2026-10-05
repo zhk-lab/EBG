@@ -3,12 +3,64 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
+import shlex
 import textwrap
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+from ..ebg.evidence_intake import EXECUTABLE_EXTENSIONS, SOURCE_EXTENSIONS
+from .matching import literal_match
 from .repository import module_statement_span
+
+
+def prioritize_repo_entries(entries: list[dict[str, Any]], question: str,
+                            events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose invoked implementations before reports and bulk result material.
+
+    Invocation tokens are navigation hints, not proof of a runtime call or success.
+    Keep the existing component order for ties and preserve every returned source.
+    """
+    commands = []
+    for event in reversed(events):
+        if event['kind'] != 'tool_call':
+            continue
+        try:
+            payload = json.loads(event['content'])
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        command = payload.get('command', payload.get('cmd'))
+        if not isinstance(command, str):
+            continue
+        for part in re.split(r'&&|\|\||[;\n]', command):
+            try:
+                words = [word.strip('\"\'') for word in shlex.split(part, posix=False)]
+            except ValueError:
+                continue
+            if words[:1] == ['&']:
+                words = words[1:]
+            if not words:
+                continue
+            program = Path(words[0].replace('\\', '/')).name.casefold()
+            interpreter = re.fullmatch(r'(?:python[\d.]*|py|node|ruby|php|lua|rscript|bash|sh|pwsh|powershell)(?:\.exe)?', program)
+            if interpreter or Path(program).suffix in EXECUTABLE_EXTENSIONS | SOURCE_EXTENSIONS:
+                commands.append(' '.join(words))
+
+    def order(entry):
+        path, _, symbol = entry.get('node', '').partition('::')
+        implementation = Path(path).suffix.lower() in SOURCE_EXTENSIONS | EXECUTABLE_EXTENSIONS
+        leaf = symbol.rsplit('.', 1)[-1] if not symbol.startswith('<') else ''
+        # A selector argument is more specific than the program's shared path.
+        symbol_rank = next((i for i, command in enumerate(commands) if literal_match(command, leaf)), len(commands))
+        path_rank = next((i for i, command in enumerate(commands) if literal_match(command, path, path=True)), len(commands))
+        query_hit = literal_match(question, leaf) or literal_match(question, path, path=True)
+        return (not implementation, symbol_rank, path_rank, not query_hit)
+
+    return sorted(entries, key=order)
 
 
 def value_contexts(contexts: list[dict[str, Any]], text: str,

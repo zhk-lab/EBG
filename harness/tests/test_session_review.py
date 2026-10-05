@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 import yaml
 
@@ -44,6 +45,23 @@ class SessionReviewTests(unittest.TestCase):
         self.assertEqual(self.h.checks.all(), [])
         self.assertEqual(self.hook('Stop', last_assistant_message='Explanation'), {})
 
+    def test_plan_discussion_with_completion_verbs_does_not_trigger_reviews(self):
+        prompts = (
+            'Complete a review of PLAN.md without executing it.',
+            'Do not complete PLAN.md; summarize it.',
+            'Explain how to complete PLAN.md.',
+        )
+        for number, prompt in enumerate(prompts):
+            with self.subTest(prompt=prompt):
+                self.h = Harness(self.root / ('discussion_' + str(number)))
+                self.assertIsNone(_execution_plan(prompt))
+                self.hook('UserPromptSubmit', prompt=prompt)
+                self.hook('PostToolUse', tool_use_id='read', tool_name='Bash',
+                          tool_input={'command': 'Get-Content PLAN.md'},
+                          tool_response='Keep evaluation split fixed.')
+                self.assertEqual(self.h.checks.all(), [])
+                self.assertEqual(self.hook('Stop', last_assistant_message='Plan reviewed.'), {})
+
     def test_explaining_execution_is_not_execution_and_read_path_is_exact(self):
         self.assertIsNone(_execution_plan('Explain how to execute PLAN.md.'))
         self.assertIsNone(_execution_plan('请解释如何按照 Plan 执行实验。'))
@@ -60,6 +78,21 @@ class SessionReviewTests(unittest.TestCase):
         (self.repo / 'PLAN.md').write_text('Use a different evaluation split.', encoding='utf-8')
         self.hook('PostToolUse', **{**call, 'tool_use_id': 'read2'})
         self.assertEqual(len(self.h.checks.all()), 2)
+
+    def test_actual_case_prompts_request_review_after_reading_the_plan(self):
+        prompts = Path(__file__).resolve().parents[1] / 'case_studies' / 'prompts'
+        cases = sorted(prompts.glob('*.md'))
+        self.assertEqual(len(cases), 5)
+        for path in cases:
+            with self.subTest(case=path.stem):
+                self.h = Harness(self.root / ('state_' + path.stem))
+                self.hook('UserPromptSubmit', prompt=path.read_text(encoding='utf-8'))
+                self.assertEqual(self.h.checks.all(), [])
+                response = self.hook('PostToolUse', tool_use_id='read', tool_name='Bash',
+                                     tool_input={'command': 'Get-Content PLAN.md'},
+                                     tool_response='Keep evaluation split fixed.')
+                self.assertIn('ebg_review', str(response))
+                self.assertEqual([check['trigger'] for check in self.h.checks.all()], ['ambiguity'])
 
     def test_failure_deferred_and_replayed_events_not_counted_twice(self):
         self.hook('UserPromptSubmit', prompt='Run train.py.')
@@ -148,6 +181,11 @@ class SessionReviewTests(unittest.TestCase):
         handle_hook(self.h, dict(base, hook_event_name='UserPromptSubmit', prompt=stop['reason']))
         (self.repo / 'train.py').write_text('def train():\n    return 40\n', encoding='utf-8')
         handle_hook(self.h, dict(base, hook_event_name='Stop', last_assistant_message='Changed'))
+        self.assertEqual(len(self.h.checks.all()), 1)
+        self.assertIsNotNone(self.h.checks.all()[0]['assessment'])
+        base = dict(session_id='s', turn_id='next_user', cwd=str(self.repo))
+        handle_hook(self.h, dict(base, hook_event_name='UserPromptSubmit', prompt='Review the updated experiment.'))
+        self.assertEqual(handle_hook(self.h, dict(base, hook_event_name='Stop', last_assistant_message='Updated'))['decision'], 'block')
         self.assertEqual(len(self.h.checks.all()), 2)
         self.assertIsNone(self.h.checks.all()[-1]['assessment'])
 
@@ -182,6 +220,23 @@ class SessionReviewTests(unittest.TestCase):
         self.assertEqual(self.hook('Stop', stop_hook_active=True,
                                    last_assistant_message='Failed; here is the verified limitation.'), {})
         self.assertEqual(len(self.h.checks.all()), 1)
+
+    def test_active_stop_after_review_and_extra_verification_creates_no_unreviewed_batch(self):
+        self.hook('UserPromptSubmit', prompt='Run train.py.')
+        self.call('a', 1)
+        self.call('b')
+        self.assertEqual(self.hook('Stop', last_assistant_message='Initial result')['decision'], 'block')
+        identifiers = [check['id'] for check in self.h.checks.all()]
+        self.assertEqual(len(identifiers), 2)
+        for identifier in identifiers:
+            self.assess(identifier)
+        self.call('extra_count_verification')
+        self.assertEqual(self.hook('Stop', stop_hook_active=True, last_assistant_message='Verified result'), {})
+        self.assertEqual([check['id'] for check in self.h.checks.all()], identifiers)
+        self.assertTrue(all(check['assessment'] for check in self.h.checks.all()))
+        with runtime(self.h.store, 's') as state:
+            self.assertEqual(state['batch']['checks'], identifiers)
+        self.assertIn('after', self.h.sessions.timeline('s')['turns'][0])
 
     def test_blocked_stop_keeps_turn_open_for_followup_tools(self):
         self.hook('UserPromptSubmit', prompt='Run train.py.')

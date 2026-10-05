@@ -54,6 +54,10 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                         review_copy = await call('ebg_evidence', {'check_id': check_id, 'read_ref': active['read_ref']})
                         self.assertEqual(review_copy, active)
                         code.write_text('CHANGED AFTER CHECK', encoding='utf-8')
+                        unanchored = await call('ebg_evidence', {'check_id': check_id,
+                            'question': 'What is in app.py?', 'refs': []})
+                        self.assertIn('UNRELATED LIVE CODE', str(unanchored))
+                        self.assertNotIn('CHANGED AFTER CHECK', str(unanchored))
                         proof = await call('ebg_evidence', {'check_id': check_id, 'question': 'What is in app.py?',
                             'refs': [{'source_id': 'P1', 'quote': prompt}]})
                         self.assertIn('questions', proof)

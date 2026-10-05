@@ -15,7 +15,7 @@ from .requirements import normalize_requirements
 from .research import research_context
 from .storage import HarnessError, Store
 from .sessions import SessionLog
-from .selection import compact_contexts, enclosing_contexts, share_repo_excerpts, value_contexts
+from .selection import compact_contexts, enclosing_contexts, prioritize_repo_entries, share_repo_excerpts, value_contexts
 from .trace import build_trace, matched_events
 from .source_refs import SourceReader
 from .components import components, node_id, relations_by_node
@@ -264,7 +264,6 @@ class Harness:
                     document_refs.setdefault(node, []).append(ref['source'])
         component_list = components(direct, graph['edges'], document)
         result = []
-        shown = {}
         for component_number, component in enumerate(component_list, 1):
             relations = relations_by_node(component['edges'], evidence)
             for node in component['nodes']:
@@ -283,14 +282,6 @@ class Harness:
                         entry['document_refs'] = document_refs[node]
                     elif node in direct:
                         entry['seed_basis'] = 'query hint / source-line path; not a direct document Symbol match'
-                    key = context['path'], tuple(context['lines'])
-                    if key in shown:
-                        entry.pop('content')
-                        entry.pop('_source_ref', None)
-                        entry['content_ref'] = entry['read_ref']
-                        entry['included_in'] = shown[key]
-                    else:
-                        shown[key] = node_id(node)
                     if relations[node]:
                         entry['relations'] = relations[node]
                     result.append(entry)
@@ -300,6 +291,19 @@ class Harness:
                 diff = self.material(view['view_id'], f'diff:{path}')
                 result.append({**diff, 'match': 'path / before-after diff',
                                'read_ref': f"{view['view_id']}:diff:{path}"})
+        result = prioritize_repo_entries(result, requirement['check'], view['events'])
+        shown = {}
+        for entry in result:
+            if 'node' not in entry:
+                continue
+            key = entry['read_ref']
+            if key in shown:
+                entry.pop('content')
+                entry.pop('_source_ref', None)
+                entry['content_ref'] = entry['read_ref']
+                entry['included_in'] = shown[key]
+            else:
+                shown[key] = entry['node']
         return result
 
     def _repo_entry(self, view, context, context_refs, reader, anchors):

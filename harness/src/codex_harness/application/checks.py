@@ -253,6 +253,9 @@ class Checks:
                  *, read_ref: str | None = None, offset: int = 0) -> str:
         check = self.get(check_id)
         task_id = 'check_' + check_id
+        # An empty optional list supplies no anchors, just like omitting it.
+        if refs == []:
+            refs = None
         if read_ref:
             if question is not None or refs is not None:
                 raise HarnessError('Read saved evidence or submit a question, not both.')

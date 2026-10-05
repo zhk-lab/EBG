@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ast
 import copy
+import json
 import os
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +27,27 @@ from .matching import code_terms
 
 
 SKIP_DIRS = {".git", ".venv", ".venv-harness", "venv", "node_modules", "__pycache__", ".ebg-harness", ".state", ".tmp", ".tmp-tests", "dist", "build"}
+HARNESS_SKILLS = {'ebg-review', 'ebg-ambiguity', 'ebg-adjustment', 'ebg-result-review'}
 GRAPH_VERSION = 2
+
+
+def generated_harness_file(path: str, content: str) -> bool:
+    """Exclude only a dedicated generated integration; retain mixed user config."""
+    try:
+        if path == '.codex/config.toml':
+            data = tomllib.loads(content)
+            servers = data.get('mcp_servers', {})
+            return (set(data) == {'mcp_servers'} and set(servers) == {'ebg_disclose'}
+                    and 'codex_harness' in servers['ebg_disclose'].get('args', []))
+        if path == '.codex/hooks.json':
+            data = json.loads(content)
+            if not isinstance(data, dict) or set(data) != {'hooks'} or not isinstance(data['hooks'], dict):
+                return False
+            hooks = [hook for groups in data['hooks'].values() for group in groups for hook in group.get('hooks', [])]
+            return bool(hooks) and all(hook.get('type') == 'command' and 'codex_harness' in hook.get('command', '') for hook in hooks)
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return False
 
 
 def bundle(root: Path, artifacts: list[RepoArtifact], document: str = "") -> VisibleBundle:
@@ -59,6 +81,9 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
     observed = {}
     for name in names:
         path = root / name
+        parts = Path(name).parts
+        if len(parts) >= 3 and parts[0] in {'.agents', '.codex'} and parts[1] == 'skills' and parts[2] in HARNESS_SKILLS:
+            continue
         if any(part in SKIP_DIRS or part.endswith(".egg-info") for part in Path(name).parts):
             continue
         resolved = path.resolve()
@@ -93,6 +118,9 @@ def capture(store: Store, root: Path, *, max_file_bytes: int = 2_000_000,
             if isinstance(error, UnicodeDecodeError):
                 uncollected[name]['reason'] = 'non_utf8'
             notes.append(f"{name}: {type(error).__name__}; not collected")
+            continue
+        if generated_harness_file(name, content):
+            del uncollected[name]
             continue
         files[name] = store.cache_file(str(root), name, content, session_id=session_id)
         del uncollected[name]

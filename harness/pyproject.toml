@@ -9,6 +9,9 @@ description = "Source-backed disclosure tools for Codex using EBG"
 requires-python = ">=3.11"
 dependencies = ["mcp>=1.29.1,<2", "PyYAML>=6.0", "tiktoken>=0.7"]
 
+[project.optional-dependencies]
+case-studies = ["numpy>=1.24"]
+
 [project.scripts]
 ebg-harness = "codex_harness.__main__:main"
 

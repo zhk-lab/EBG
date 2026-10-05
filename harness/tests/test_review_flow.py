@@ -43,6 +43,16 @@ class ReviewFlowTests(unittest.TestCase):
         reread = yaml.safe_load(self.harness.checks.evidence(review['check_id'], read_ref=review['read_ref']))
         self.assertEqual(reread, review)
 
+    def test_empty_refs_use_the_same_checkpoint_anchors_as_omitted_refs(self):
+        review = yaml.safe_load(self.harness.checks.review(trigger='result', focus='Report training'))
+        check_id = review['check_id']
+        omitted = yaml.safe_load(self.harness.checks.evidence(check_id, 'What budget does train.py use?'))
+        empty = yaml.safe_load(self.harness.checks.evidence(check_id, 'What budget does train.py use?', refs=[]))
+        self.assertEqual(empty, omitted)
+        self.assertIn('return 30', str(empty))
+        reread = yaml.safe_load(self.harness.checks.evidence(check_id, read_ref=review['read_ref'], refs=[]))
+        self.assertEqual(reread, review)
+
     def test_all_review_and_evidence_pages_use_the_evidence_reader(self):
         review = yaml.safe_load(self.harness.checks.review(trigger='result', focus='Report training'))
         check_id = review['check_id']
